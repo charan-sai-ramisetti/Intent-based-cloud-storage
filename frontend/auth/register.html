@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Register | TriCloud Vault</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="../css/auth.css" />
+</head>
+
+<body class="bg-light">
+
+<nav class="navbar bg-white border-bottom px-3">
+  <div class="container-fluid">
+
+    <span class="navbar-brand fw-semibold">TriCloud Vault</span>
+
+    <div class="d-flex gap-3">
+
+      <a href="/auth/login.html"
+         id="navLogin"
+         class="text-primary text-decoration-none fw-medium">
+        Login
+      </a>
+
+      <a href="/auth/register.html"
+         id="navRegister"
+         class="text-primary text-decoration-none fw-medium">
+        Register
+      </a>
+
+      <a href="https://tricloudvault.charansai.me/admin/"
+         id="navAdmin"
+         class="text-primary text-decoration-none fw-medium">
+        Admin Login
+      </a>
+
+    </div>
+
+  </div>
+</nav>
+<script>
+
+const path = window.location.pathname;
+
+if(path.includes("login")){
+    document.getElementById("navLogin").classList.remove("text-primary");
+    document.getElementById("navLogin").classList.add("text-muted");
+}
+
+if(path.includes("register")){
+    document.getElementById("navRegister").classList.remove("text-primary");
+    document.getElementById("navRegister").classList.add("text-muted");
+}
+
+</script>
+
+<main class="container d-flex align-items-center justify-content-center" style="min-height: calc(100vh - 64px);">
+  <div class="col-12 col-sm-10 col-md-6 col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+
+        <h4 class="fw-semibold text-center mb-4">Create Account</h4>
+
+        <label>Username <span class="text-danger">*</span></label>
+        <input id="username" class="form-control mb-3"
+               placeholder="Username (no spaces)"
+               pattern="^[a-zA-Z0-9._]+$"
+               required />
+
+        <label>Email <span class="text-danger">*</span></label>
+        <input id="email" type="email" class="form-control mb-3"
+               placeholder="Email" required />
+
+        <label>Password <span class="text-danger">*</span></label>
+        <div class="position-relative mb-3">
+          <input id="password" type="password" class="form-control"
+                 placeholder="Password (min 8 chars)"
+                 oninput="checkPasswords()"
+                 required />
+
+          <span onclick="togglePassword('password')" style="position:absolute;right:10px;top:10px;cursor:pointer;">👁</span>
+        </div>
+
+        <label>Confirm Password <span class="text-danger">*</span></label>
+        <div class="position-relative mb-3">
+          <input id="confirmPassword" type="password"
+                 class="form-control"
+                 oninput="checkPasswords()"
+                 required />
+
+          <span onclick="togglePassword('confirmPassword')" style="position:absolute;right:10px;top:10px;cursor:pointer;">👁</span>
+        </div>
+
+        <p id="passwordMatch" class="text-danger small"></p>
+
+        <button id="registerBtn"
+                class="btn btn-primary w-100"
+                disabled
+                onclick="validateAndRegister()">
+
+          Register
+
+        </button>
+
+        <p class="text-center text-muted mt-3 mb-0">
+          Already have an account?
+          <a href="login.html" class="fw-medium text-decoration-none">Login</a>
+        </p>
+
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="../js/config.js"></script>
+<script src="../js/auth.js"></script>
+
+<script>
+
+function togglePassword(id){
+  const input=document.getElementById(id);
+  input.type=input.type==="password"?"text":"password";
+}
+
+function isValidPassword(pwd) {
+  return pwd.length >= 8 && /\d/.test(pwd) && /[a-zA-Z]/.test(pwd);
+}
+
+function checkPasswords(){
+
+  const pwd=document.getElementById("password").value;
+  const confirm=document.getElementById("confirmPassword").value;
+  const msg=document.getElementById("passwordMatch");
+  const btn=document.getElementById("registerBtn");
+
+  if(pwd!==confirm){
+      msg.innerText="Passwords do not match";
+      btn.disabled=true;
+  }
+  else{
+      msg.innerText="";
+      btn.disabled=false;
+  }
+
+}
+
+function validateAndRegister() {
+
+  const btn=document.getElementById("registerBtn");
+  btn.disabled=true;
+
+  const username = document.getElementById("username");
+  const email = document.getElementById("email");
+  const password = document.getElementById("password");
+
+  username.value = username.value.trim();
+
+  if (!username.checkValidity()) {
+    alert("Username can contain letters, numbers, . and _ only.");
+    btn.disabled=false;
+    return;
+  }
+
+  if (!isValidPassword(password.value)) {
+    alert("Password must be at least 8 characters and include letters and numbers.");
+    btn.disabled=false;
+    return;
+  }
+
+  register(username.value, email.value, password.value);
+}
+
+</script>
+
+</body>
+</html>

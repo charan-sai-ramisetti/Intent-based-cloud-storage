@@ -1,0 +1,104 @@
+- name: Fetch secrets from AWS Secrets Manager
+  command: >
+    aws secretsmanager get-secret-value
+    --secret-id tricloud/production/secrets
+    --region ap-south-1
+    --query SecretString
+    --output text
+  register: secrets_json
+  no_log: true
+  changed_when: false
+
+- name: Parse secrets into Ansible facts
+  set_fact:
+    app_secrets: "{{ secrets_json.stdout | from_json }}"
+  no_log: true
+
+- name: Mark repo as safe for git
+  command: git config --global --add safe.directory /home/ubuntu/tricloud-vault
+  args:
+    creates: /home/ubuntu/.gitconfig
+
+- name: Clone repository
+  git:
+    repo: "{{ repo_url }}"
+    dest: "{{ app_dir }}"
+    version: main
+    force: yes
+
+- name: Create virtual environment
+  command: python3 -m venv {{ venv_dir }}
+  args:
+    creates: "{{ venv_dir }}"
+
+- name: Install requirements
+  pip:
+    requirements: "{{ backend_dir }}/tri_cloud_vault/requirements.txt"
+    virtualenv: "{{ venv_dir }}"
+
+- name: Install gunicorn (temporary fix)
+  pip:
+    name: gunicorn
+    virtualenv: "{{ venv_dir }}"
+
+- name: Create logs directory
+  file:
+    path: "{{ backend_dir }}/logs"
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+
+- name: Copy .env file
+  template:
+    src: env.j2
+    dest: "{{ backend_dir }}/.env"
+    owner: ubuntu
+    group: ubuntu
+    mode: '0600'
+
+- name: Copy GCP credentials
+  template:
+    src: gcp_credentials.j2
+    dest: /home/ubuntu/tricloud-vault/tri_cloud_vault_gcp.json
+    owner: ubuntu
+    group: ubuntu
+    mode: '0600'
+
+- name: Run migrations
+  command: "{{ venv_dir }}/bin/python manage.py migrate"
+  args:
+    chdir: "{{ backend_dir }}/tri_cloud_vault"
+  environment:
+    GOOGLE_APPLICATION_CREDENTIALS: /home/ubuntu/tricloud-vault/tri_cloud_vault_gcp.json
+
+- name: Collect static files
+  command: "{{ venv_dir }}/bin/python manage.py collectstatic --noinput"
+  args:
+    chdir: "{{ backend_dir }}/tri_cloud_vault"
+
+- name: Create Django superuser
+  shell: |
+    echo "from accounts.models import User; \
+    User.objects.filter(email='{{ superuser_email }}').exists() or \
+    User.objects.create_superuser(email='{{ superuser_email }}', password='{{ superuser_password }}')" | \
+    {{ venv_dir }}/bin/python manage.py shell
+  args:
+    chdir: "{{ backend_dir }}/tri_cloud_vault"
+  environment:
+    GOOGLE_APPLICATION_CREDENTIALS: /home/ubuntu/tricloud-vault/tri_cloud_vault_gcp.json
+  no_log: true
+
+- name: Copy systemd service
+  template:
+    src: tricloud.service.j2
+    dest: /etc/systemd/system/tricloud.service
+  notify: Restart tricloud service
+
+- name: Reload systemd
+  command: systemctl daemon-reload
+
+- name: Enable and start service
+  systemd:
+    name: tricloud
+    enabled: yes
+    state: started

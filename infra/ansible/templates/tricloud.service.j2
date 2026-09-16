@@ -1,0 +1,25 @@
+[Unit]
+Description=TriCloud Vault Django Backend
+After=network.target
+
+[Service]
+User=ubuntu
+Group=ubuntu
+WorkingDirectory={{ backend_dir }}/tri_cloud_vault
+
+Environment="PATH={{ venv_dir }}/bin"
+Environment="TZ=Asia/Kolkata"
+EnvironmentFile={{ backend_dir }}/.env
+
+ExecStart={{ venv_dir }}/bin/gunicorn \
+  tri_cloud_vault.wsgi:application \
+  --bind 127.0.0.1:8000 \
+  --workers 3 \
+  --access-logfile {{ backend_dir }}/logs/gunicorn_access.log \
+  --error-logfile {{ backend_dir }}/logs/gunicorn_error.log
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

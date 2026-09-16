@@ -1,0 +1,8 @@
+---
+- name: Reload systemd
+  command: systemctl daemon-reload
+
+- name: Restart Caddy
+  systemd:
+    name: caddy
+    state: restarted

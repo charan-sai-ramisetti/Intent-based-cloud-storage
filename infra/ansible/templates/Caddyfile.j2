@@ -1,0 +1,48 @@
+:8080 {
+    encode gzip
+
+    handle /health {
+        respond "OK" 200
+    }
+
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8000 {
+            transport http {
+                response_header_timeout 60s
+                read_timeout 120s
+                write_timeout 120s
+            }
+        }
+    }
+
+    handle /admin/* {
+        reverse_proxy 127.0.0.1:8000
+    }
+
+    handle /static/* {
+        root * {{ backend_dir }}/tri_cloud_vault/staticfiles
+        uri strip_prefix /static
+        file_server
+    }
+
+    handle /js/* {
+        root * {{ app_dir }}/frontend
+        file_server
+    }
+
+    handle /css/* {
+        root * {{ app_dir }}/frontend
+        file_server
+    }
+
+    handle /assets/* {
+        root * {{ app_dir }}/frontend
+        file_server
+    }
+
+    handle {
+        root * {{ app_dir }}/frontend
+        try_files {path} {path}.html /index.html
+        file_server
+    }
+}

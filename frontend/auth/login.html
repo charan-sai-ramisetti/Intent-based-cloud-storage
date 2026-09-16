@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login | TriCloud Vault</title>
+
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/css/auth.css" />
+</head>
+
+<body class="bg-light">
+
+<nav class="navbar bg-white border-bottom px-3">
+  <div class="container-fluid">
+
+    <span class="navbar-brand fw-semibold">TriCloud Vault</span>
+
+    <div class="d-flex gap-3">
+
+      <a href="/auth/login.html"
+         id="navLogin"
+         class="text-primary text-decoration-none fw-medium">
+        Login
+      </a>
+
+      <a href="/auth/register.html"
+         id="navRegister"
+         class="text-primary text-decoration-none fw-medium">
+        Register
+      </a>
+
+      <a href="https://tricloudvault.charansai.me/admin/"
+         id="navAdmin"
+         class="text-primary text-decoration-none fw-medium">
+        Admin Login
+      </a>
+
+    </div>
+
+  </div>
+</nav>
+
+<script>
+const path = window.location.pathname;
+
+if(path.includes("login")){
+    document.getElementById("navLogin").classList.remove("text-primary");
+    document.getElementById("navLogin").classList.add("text-muted");
+}
+
+if(path.includes("register")){
+    document.getElementById("navRegister").classList.remove("text-primary");
+    document.getElementById("navRegister").classList.add("text-muted");
+}
+</script>
+
+<main class="container d-flex align-items-center justify-content-center" style="min-height: calc(100vh - 64px);">
+  <div class="col-12 col-sm-10 col-md-6 col-lg-4">
+
+    <div class="card shadow-sm">
+
+      <div class="card-body p-4">
+
+        <h4 class="fw-semibold text-center mb-4">Login</h4>
+
+        <form id="loginForm">
+
+          <div class="mb-3">
+            <label>Email <span class="text-danger">*</span></label>
+            <input type="email" id="loginEmail" class="form-control" required />
+          </div>
+
+          <div class="mb-3 position-relative">
+            <label>Password <span class="text-danger">*</span></label>
+
+            <input type="password"
+                   id="loginPassword"
+                   class="form-control"
+                   required />
+
+            <span onclick="togglePassword('loginPassword',this)"
+              style="position:absolute;right:10px;top:38px;cursor:pointer;">
+              👁
+            </span>
+
+          </div>
+
+          <button id="loginBtn" type="submit" class="btn btn-primary w-100">
+            Login
+          </button>
+
+          <p id="login-error"
+             class="text-danger text-center mt-3"
+             style="display:none;"></p>
+
+        </form>
+
+        <p class="text-center mt-3 mb-0">
+          <a href="/auth/forgot-password.html" class="text-decoration-none">
+            Forgot password?
+          </a>
+        </p>
+
+        <p class="text-center text-muted mt-2 mb-0">
+          Don’t have an account?
+          <a href="/auth/register.html" class="fw-medium text-decoration-none">
+            Register
+          </a>
+        </p>
+
+      </div>
+
+    </div>
+
+  </div>
+</main>
+
+<script src="/js/config.js"></script>
+<script src="/js/auth.js"></script>
+
+<script>
+function togglePassword(id){
+  const input = document.getElementById(id);
+  input.type = input.type === "password" ? "text" : "password";
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,95 @@
+/* ===============================
+   AUTH THEME VARIABLES
+   =============================== */
+:root {
+  --primary-blue: #4F6EF7;
+  --primary-blue-dark: #3F5AE0;
+  --bg-gradient-start: #EEF2FF;
+  --bg-gradient-end: #F8FAFF;
+  --text-dark: #1F2937;
+  --text-muted: #6B7280;
+  --border-light: #E5E7EB;
+}
+
+/* ===============================
+   BASE
+   =============================== */
+body {
+  min-height: 100vh;
+  background: linear-gradient(
+    135deg,
+    var(--bg-gradient-start),
+    var(--bg-gradient-end)
+  );
+  color: var(--text-dark);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* ===============================
+   NAVBAR BRAND
+   =============================== */
+.navbar-brand {
+  font-weight: 600;
+  font-size: 18px;
+  color: var(--text-dark);
+}
+
+/* ===============================
+   LINKS
+   =============================== */
+a {
+  color: var(--primary-blue);
+}
+
+a:hover {
+  color: var(--primary-blue-dark);
+}
+
+/* ===============================
+   CARDS (AUTH)
+   =============================== */
+.card {
+  border-radius: 14px;
+  border: 1px solid var(--border-light);
+}
+
+.card-body {
+  padding: 28px;
+}
+
+/* ===============================
+   BUTTONS
+   =============================== */
+.btn-primary {
+  background-color: var(--primary-blue);
+  border-color: var(--primary-blue);
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-blue-dark);
+  border-color: var(--primary-blue-dark);
+}
+
+/* ===============================
+   INPUT FOCUS
+   =============================== */
+.form-control:focus {
+  border-color: var(--primary-blue);
+  box-shadow: 0 0 0 0.2rem rgba(79, 110, 247, 0.15);
+}
+
+/* ===============================
+   TEXT MUTED OVERRIDE
+   =============================== */
+.text-muted {
+  color: var(--text-muted) !important;
+}
+
+/* ===============================
+   MOBILE TWEAKS
+   =============================== */
+@media (max-width: 480px) {
+  .card-body {
+    padding: 22px;
+  }
+}

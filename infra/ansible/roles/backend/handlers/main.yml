@@ -1,0 +1,6 @@
+---
+- name: Restart tricloud service
+  systemd:
+    name: tricloud
+    state: restarted
+    daemon_reload: yes

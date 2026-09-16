@@ -1,0 +1,74 @@
+- name: Add Caddy GPG key
+  shell: |
+    curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/gpg.key \
+    | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+  args:
+    creates: /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+  register: caddy_gpg_added
+
+- name: Add Caddy APT repository
+  shell: |
+    curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt \
+    | tee /etc/apt/sources.list.d/caddy-stable.list
+  args:
+    creates: /etc/apt/sources.list.d/caddy-stable.list
+  register: caddy_repo_added
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+  when: caddy_repo_added.changed or caddy_gpg_added.changed
+
+- name: Install Caddy
+  apt:
+    name: caddy
+    state: present
+
+- name: Set directory permissions for Caddy access
+  file:
+    path: "{{ item }}"
+    mode: "0755"
+  loop:
+    - /home/ubuntu
+    - "{{ app_dir }}"
+    - "{{ backend_dir }}"
+
+- name: Set ownership for frontend
+  file:
+    path: "{{ app_dir }}/frontend"
+    owner: caddy
+    group: caddy
+    recurse: yes
+
+- name: Ensure frontend permissions
+  file:
+    path: "{{ app_dir }}/frontend"
+    mode: "0755"
+    recurse: yes
+
+- name: Set ownership for static files
+  file:
+    path: "{{ backend_dir }}/tri_cloud_vault/staticfiles"
+    owner: caddy
+    group: caddy
+    recurse: yes
+
+- name: Ensure static files permissions
+  file:
+    path: "{{ backend_dir }}/tri_cloud_vault/staticfiles"
+    mode: "0755"
+    recurse: yes
+
+- name: Copy Caddyfile
+  template:
+    src: Caddyfile.j2
+    dest: /etc/caddy/Caddyfile
+  notify:
+    - Reload systemd
+    - Restart Caddy
+
+- name: Enable Caddy service
+  systemd:
+    name: caddy
+    enabled: yes
+    state: started

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TriCloud Vault | Multi-Cloud Storage</title>
+
+  <!-- Bootstrap CSS -->
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+
+  <!-- Custom CSS -->
+  <style>
+    body {
+      background: linear-gradient(135deg, #eef3ff, #f9fbff);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    .hero {
+      min-height: calc(100vh - 64px);
+    }
+
+    .badge-tech {
+      background: #e0e7ff;
+      color: #1e40af;
+      font-weight: 500;
+      margin: 4px;
+      padding: 6px 10px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+    }
+
+    .tech-grid img {
+      height: 56px;
+      margin-bottom: 8px;
+    }
+
+    .tech-grid p {
+      font-size: 0.85rem;
+      color: #555;
+      margin: 0;
+    }
+
+    @media (max-width: 576px) {
+      .tech-grid img {
+        height: 46px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ===============================
+       NAVBAR
+       =============================== -->
+  <nav class="navbar bg-white border-bottom px-3">
+  <div class="container-fluid">
+
+    <span class="navbar-brand fw-semibold">TriCloud Vault</span>
+
+    <div class="d-flex gap-3">
+
+      <a href="/auth/login.html"
+         id="navLogin"
+         class="text-primary text-decoration-none fw-medium">
+        Login
+      </a>
+
+      <a href="/auth/register.html"
+         id="navRegister"
+         class="text-primary text-decoration-none fw-medium">
+        Register
+      </a>
+
+      <a href="https://tricloudvault.charansai.me/admin/"
+         id="navAdmin"
+         class="text-primary text-decoration-none fw-medium">
+        Admin Login
+      </a>
+
+    </div>
+
+  </div>
+</nav>
+<script>
+
+const path = window.location.pathname;
+
+if(path.includes("login")){
+    document.getElementById("navLogin").classList.remove("text-primary");
+    document.getElementById("navLogin").classList.add("text-muted");
+}
+
+if(path.includes("register")){
+    document.getElementById("navRegister").classList.remove("text-primary");
+    document.getElementById("navRegister").classList.add("text-muted");
+}
+
+</script>
+
+  <!-- ===============================
+       HERO SECTION
+       =============================== -->
+  <section class="hero d-flex align-items-center">
+    <div class="container">
+      <div class="row align-items-center">
+
+        <div class="col-lg-7">
+          <h1 class="fw-bold mb-3">
+            Secure Multi-Cloud Storage<br />
+            <span class="text-primary">Without Vendor Lock-In</span>
+          </h1>
+
+          <p class="text-muted fs-5 mb-4">
+            TriCloud Vault lets you upload, manage, and secure files across
+            <strong>AWS S3</strong>, <strong>Azure Blob Storage</strong>, and
+            <strong>Google Cloud Storage</strong> — all from a single dashboard.
+          </p>
+
+          <div class="mb-4">
+            <span class="badge-tech">AWS</span>
+            <span class="badge-tech">Azure</span>
+            <span class="badge-tech">GCP</span>
+            <span class="badge-tech">JWT Auth</span>
+            <span class="badge-tech">Razorpay UPI</span>
+            <span class="badge-tech">CI/CD</span>
+          </div>
+
+          <div class="d-flex gap-3 mb-2">
+            <a href="auth/register.html" class="btn btn-primary btn-lg">
+              Start Free
+            </a>
+            <a href="auth/login.html" class="btn btn-outline-secondary btn-lg">
+              Login
+            </a>
+          </div>
+
+          <p class="text-muted small">
+            No credit card required • Free tier available
+          </p>
+        </div>
+
+        <div class="col-lg-5 mt-5 mt-lg-0">
+          <div class="card shadow-sm p-4">
+            <h5 class="fw-semibold mb-3">Key Capabilities</h5>
+            <ul class="text-muted mb-0">
+              <li>Direct cloud uploads using signed URLs</li>
+              <li>User-isolated storage & folders</li>
+              <li>Pay-as-you-go billing with Razorpay</li>
+              <li>Automated infrastructure & CI/CD</li>
+              <li>Production-grade backend architecture</li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ===============================
+       TECH STACK GRID
+       =============================== -->
+  <section class="py-5 bg-white border-top">
+    <div class="container text-center">
+      <p class="text-muted fw-medium mb-4">
+        Powered by industry-standard cloud & DevOps technologies
+      </p>
+
+      <div class="row justify-content-center g-4 tech-grid">
+
+        <div class="col-4 col-sm-3 col-md-2">
+  <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/amazonwebservices/amazonwebservices-plain-wordmark.svg" alt="AWS">
+  <p>AWS</p>
+</div>
+
+
+        <div class="col-4 col-sm-3 col-md-2">
+          <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/azure/azure-original.svg" alt="Azure">
+          <p>Azure</p>
+        </div>
+
+        <div class="col-4 col-sm-3 col-md-2">
+          <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/googlecloud/googlecloud-original.svg" alt="GCP">
+          <p>GCP</p>
+        </div>
+
+        <div class="col-4 col-sm-3 col-md-2">
+          <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/docker/docker-original.svg" alt="Docker">
+          <p>Docker</p>
+        </div>
+
+        <div class="col-4 col-sm-3 col-md-2">
+          <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/terraform/terraform-original.svg" alt="Terraform">
+          <p>Terraform</p>
+        </div>
+
+        <div class="col-4 col-sm-3 col-md-2">
+          <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/ansible/ansible-original.svg" alt="Ansible">
+          <p>Ansible</p>
+        </div>
+
+        <div class="col-4 col-sm-3 col-md-2">
+          <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/github/github-original.svg" alt="GitHub Actions">
+          <p>GitHub Actions</p>
+        </div>
+
+        <div class="col-4 col-sm-3 col-md-2">
+          <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/django/django-plain.svg" alt="Django">
+          <p>Django</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ===============================
+       FOOTER
+       =============================== -->
+  <footer class="text-center py-4 border-top bg-light">
+    <p class="text-muted mb-0">
+      © 2026 TriCloud Vault • Multi-Cloud Storage Platform
+    </p>
+  </footer>
+
+</body>
+</html>
