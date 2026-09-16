@@ -25,4 +25,9 @@ urlpatterns = [
     path("api/files/", include("files.urls")),
     path("api/payments/", include("payments.urls")),
     path("api/storage/", include("dashboard.urls")),
+    # Intent-driven optimization endpoints
+    path("api/intent/", include("intent.urls")),
+    path("api/optimizer/", include("optimizer.urls")),
+    path("api/orchestration/", include("orchestration.urls")),
+    path("api/telemetry/", include("telemetry.urls")),
 ]

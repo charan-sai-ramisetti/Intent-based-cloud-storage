@@ -68,6 +68,13 @@ INSTALLED_APPS = [
     "clouds",
     "dashboard",
     "payments",
+
+    # Intent-driven optimization apps
+    "intent",
+    "optimizer",
+    "orchestration",
+    "telemetry",
+    "experiments",
 ]
 
 JAZZMIN_SETTINGS = {
@@ -254,3 +261,25 @@ SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# --------------------------------------------------
+# CELERY & REDIS
+# --------------------------------------------------
+
+REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL)
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", REDIS_URL)
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
+
+# --------------------------------------------------
+# INTENT & LLM OPTIMIZER CONFIG
+# --------------------------------------------------
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+DEFAULT_LLM_PROVIDER = os.getenv("DEFAULT_LLM_PROVIDER", "anthropic")  # 'anthropic' or 'openai' or 'heuristic'

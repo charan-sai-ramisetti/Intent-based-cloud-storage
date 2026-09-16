@@ -1,0 +1,20 @@
+[Unit]
+Description=TriCloud Vault Celery Worker
+After=network.target redis.service
+
+[Service]
+User=ubuntu
+Group=ubuntu
+WorkingDirectory={{ backend_dir }}/tri_cloud_vault
+
+Environment="PATH={{ venv_dir }}/bin"
+Environment="TZ=Asia/Kolkata"
+EnvironmentFile={{ backend_dir }}/.env
+
+ExecStart={{ venv_dir }}/bin/celery -A tri_cloud_vault worker --loglevel=info --concurrency=4
+
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

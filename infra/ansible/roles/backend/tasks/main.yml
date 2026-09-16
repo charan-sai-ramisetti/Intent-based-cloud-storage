@@ -88,17 +88,40 @@
     GOOGLE_APPLICATION_CREDENTIALS: /home/ubuntu/tricloud-vault/tri_cloud_vault_gcp.json
   no_log: true
 
+- name: Install Redis server
+  apt:
+    name: redis-server
+    state: present
+    update_cache: yes
+
+- name: Ensure Redis is started and enabled
+  systemd:
+    name: redis-server
+    state: started
+    enabled: yes
+
 - name: Copy systemd service
   template:
     src: tricloud.service.j2
     dest: /etc/systemd/system/tricloud.service
   notify: Restart tricloud service
 
+- name: Copy Celery systemd service
+  template:
+    src: celery.service.j2
+    dest: /etc/systemd/system/celery.service
+
 - name: Reload systemd
   command: systemctl daemon-reload
 
-- name: Enable and start service
+- name: Enable and start tricloud service
   systemd:
     name: tricloud
+    enabled: yes
+    state: started
+
+- name: Enable and start celery service
+  systemd:
+    name: celery
     enabled: yes
     state: started

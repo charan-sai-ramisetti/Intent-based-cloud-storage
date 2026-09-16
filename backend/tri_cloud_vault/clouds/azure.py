@@ -6,7 +6,7 @@ from azure.storage.blob import (
     BlobSasPermissions,
 )
 from azure.core.exceptions import AzureError
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 import uuid
 import time
@@ -39,7 +39,7 @@ def generate_azure_upload_url(user_id, file_name):
             blob_name=blob_name,
             account_key=ACCOUNT_KEY,
             permission=BlobSasPermissions(write=True),
-            expiry=datetime.utcnow() + timedelta(hours=1),
+            expiry=datetime.now(timezone.utc) + timedelta(hours=1),
         )
         url = f"https://{ACCOUNT_NAME}.blob.core.windows.net/{CONTAINER}/{blob_name}?{sas}"
         return blob_name, url
@@ -57,7 +57,7 @@ def generate_azure_download_url(blob_name):
             blob_name=blob_name,
             account_key=ACCOUNT_KEY,
             permission=BlobSasPermissions(read=True),
-            expiry=datetime.utcnow() + timedelta(hours=1),
+            expiry=datetime.now(timezone.utc) + timedelta(hours=1),
         )
         return f"https://{ACCOUNT_NAME}.blob.core.windows.net/{CONTAINER}/{blob_name}?{sas}"
     except AzureError as e:
@@ -85,7 +85,7 @@ def generate_block_upload_url(blob_name, block_id):
             blob_name=blob_name,
             account_key=ACCOUNT_KEY,
             permission=BlobSasPermissions(write=True),
-            expiry=datetime.utcnow() + timedelta(hours=1),
+            expiry=datetime.now(timezone.utc) + timedelta(hours=1),
         )
         return (
             f"https://{ACCOUNT_NAME}.blob.core.windows.net/{CONTAINER}/"
@@ -128,7 +128,7 @@ def generate_presigned_block_urls(user_id, file_name, file_size, chunk_size=DEFA
             blob_name=blob_name,
             account_key=ACCOUNT_KEY,
             permission=BlobSasPermissions(write=True),
-            expiry=datetime.utcnow() + timedelta(hours=2),
+            expiry=datetime.now(timezone.utc) + timedelta(hours=2),
         )
 
         presigned_urls = []

@@ -1,4 +1,4 @@
-repo_url: https://github.com/charan-sai-ramisetti/tricloud-vault.git
+repo_url: https://github.com/charan-sai-ramisetti/Intent-based-cloud-storage.git
 app_dir: /home/ubuntu/tricloud-vault
 backend_dir: "{{ app_dir }}/backend"
 venv_dir: "{{ backend_dir }}/env"

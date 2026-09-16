@@ -38,6 +38,123 @@
   <main class="container-fluid py-3">
     <div class="row g-3">
 
+      <!-- ==============================================
+           INTENT-DRIVEN MULTI-CLOUD OPTIMIZER (FEATURE)
+           ============================================== -->
+      <div class="col-12">
+        <div class="card shadow-sm border-primary">
+          <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <span class="fw-semibold">⚡ Intent-Driven Multicloud Optimizer (AI + MILP)</span>
+            <span class="badge bg-light text-primary">Research Preview</span>
+          </div>
+          <div class="card-body">
+            <p class="text-muted small mb-2">
+              State your storage goals in plain English (e.g. <em>"Store my database backup with 2 copies under $5/month"</em>).
+              Our system parses your constraints and uses mathematical optimization (MILP) to find the provably cheapest multi-cloud placement.
+            </p>
+
+            <div class="row g-2 align-items-center">
+              <div class="col-12 col-md-6">
+                <input
+                  type="text"
+                  id="intent-text-input"
+                  class="form-control"
+                  placeholder="e.g., Highly available critical medical scans with 3 replicas and under 40ms latency"
+                />
+              </div>
+              <div class="col-12 col-md-3">
+                <input type="file" id="intentFileInput" class="form-control form-control-sm" />
+              </div>
+              <div class="col-12 col-md-3">
+                <button
+                  id="parse-intent-btn"
+                  class="btn btn-primary w-100 fw-semibold"
+                  onclick="submitStorageIntent()"
+                >
+                  Optimize Placement
+                </button>
+              </div>
+            </div>
+
+            <div id="intent-status-message" class="mt-2"></div>
+
+            <!-- OPTIMIZATION RESULT CARD (Initially Hidden) -->
+            <div id="intent-result-card" class="mt-3 p-3 bg-light border rounded d-none">
+              <div class="row g-3">
+
+                <!-- Left: Parsed Constraints & Recommended Clouds -->
+                <div class="col-12 col-lg-6">
+                  <h6 class="fw-bold text-dark mb-2">1. Parsed Storage Constraints (LLM)</h6>
+                  <div id="parsed-constraints-badges" class="mb-3"></div>
+
+                  <h6 class="fw-bold text-dark mb-2">2. Optimal Cloud Allocation (MILP Solver)</h6>
+                  <div id="optimal-clouds-list"></div>
+
+                  <div class="p-2 bg-white rounded border mb-2">
+                    <small class="text-muted d-block fw-semibold">Mathematical Placement Reasoning:</small>
+                    <small id="optimal-reasoning" class="text-secondary"></small>
+                  </div>
+                </div>
+
+                <!-- Right: Metrics & Baselines -->
+                <div class="col-12 col-lg-6">
+                  <h6 class="fw-bold text-dark mb-2">3. Projected Cost & Performance</h6>
+                  <div class="row g-2 mb-3 text-center">
+                    <div class="col-4">
+                      <div class="p-2 bg-white rounded border">
+                        <small class="text-muted d-block">Est. Cost</small>
+                        <span id="optimal-total-cost" class="fw-bold text-success">$0.00</span>
+                      </div>
+                    </div>
+                    <div class="col-4">
+                      <div class="p-2 bg-white rounded border">
+                        <small class="text-muted d-block">Avg Latency</small>
+                        <span id="optimal-latency" class="fw-bold text-primary">0 ms</span>
+                      </div>
+                    </div>
+                    <div class="col-4">
+                      <div class="p-2 bg-white rounded border">
+                        <small class="text-muted d-block">Durability</small>
+                        <span id="optimal-durability" class="fw-bold text-dark">99.99%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <h6 class="fw-bold text-dark mb-2">4. Baseline Comparison (Empirical Benchmark)</h6>
+                  <div class="table-responsive">
+                    <table class="table table-sm table-bordered bg-white mb-2">
+                      <thead class="table-light">
+                        <tr>
+                          <th>Strategy</th>
+                          <th>Clouds</th>
+                          <th>Cost</th>
+                          <th>Latency</th>
+                          <th>Advantage</th>
+                        </tr>
+                      </thead>
+                      <tbody id="baseline-comparison-tbody"></tbody>
+                    </table>
+                  </div>
+
+                  <small id="optimization-telemetry" class="text-muted d-block mb-3"></small>
+
+                  <button
+                    id="execute-upload-btn"
+                    class="btn btn-success w-100 fw-bold"
+                    onclick="executeOptimizedUpload()"
+                  >
+                    Execute Multi-Cloud Placement
+                  </button>
+                  <div id="execution-status-message" class="mt-2"></div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
       <!-- STORAGE USAGE -->
       <div class="col-12 col-lg-4">
         <div class="card shadow-sm h-100">
@@ -189,6 +306,7 @@
   <script src="../js/utils.js"></script>
   <script src="../js/files.js"></script>
   <script src="../js/upload.js"></script>
+  <script src="../js/intent.js"></script>
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   <script src="../js/payments.js"></script>
   <script src="../js/dashboard.js"></script>
