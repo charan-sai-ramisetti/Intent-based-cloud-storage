@@ -280,6 +280,29 @@ CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
 # INTENT & LLM OPTIMIZER CONFIG
 # --------------------------------------------------
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-DEFAULT_LLM_PROVIDER = os.getenv("DEFAULT_LLM_PROVIDER", "anthropic")  # 'anthropic' or 'openai' or 'heuristic'
+# --------------------------------------------------
+# INTENT & LLM OPTIMIZER CONFIG
+# Priority 1: AWS Bedrock (Claude 3.5 Sonnet) — uses AWS IAM, no API key needed
+# Priority 2: Azure OpenAI (GPT-4o)           — uses AZURE_OPENAI_* credentials
+# Priority 3: Heuristic fallback              — offline, zero cost
+# --------------------------------------------------
+
+# Provider selection: 'bedrock' | 'azure_openai' | 'anthropic' | 'openai' | 'heuristic'
+DEFAULT_LLM_PROVIDER = os.getenv("DEFAULT_LLM_PROVIDER", "bedrock")
+
+# --- AWS Bedrock (Claude via AWS credits — no Anthropic key required) ---
+AWS_BEDROCK_REGION = os.getenv("AWS_BEDROCK_REGION", "ap-south-1")
+AWS_BEDROCK_MODEL_ID = os.getenv(
+    "AWS_BEDROCK_MODEL_ID",
+    "anthropic.claude-3-5-sonnet-20241022-v2:0"
+)
+
+# --- Azure OpenAI (GPT-4o via Azure credits — no OpenAI direct key required) ---
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "")           # https://YOUR-RESOURCE.openai.azure.com/
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY", "")             # Key 1 from Azure Portal
+AZURE_OPENAI_DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o")
+AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-08-01-preview")
+
+# --- Legacy direct API keys (kept for local dev; not used in production) ---
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")

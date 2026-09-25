@@ -3,7 +3,7 @@ environment  = "prod"
 
 aws_region        = "ap-south-1"
 vpc_cidr          = "10.1.0.0/16"
-ec2_instance_type = "t3.medium"
+ec2_instance_type = "m7i-flex.large"
 
 azure_location = "centralindia"
 

@@ -1,3 +1,25 @@
+# ------------------------------------------------------------------
+# AWS Bedrock access — the EC2 instance needs bedrock:InvokeModel.
+# The IAM role must have AmazonBedrockFullAccess (or custom policy).
+# The task below simply verifies connectivity; Terraform provisions the role.
+# ------------------------------------------------------------------
+- name: Verify AWS Bedrock connectivity (Claude via AWS credits)
+  command: >
+    aws bedrock list-foundation-models
+    --region ap-south-1
+    --query "modelSummaries[?contains(modelId,'anthropic')].modelId"
+    --output text
+  register: bedrock_check
+  failed_when: false
+  changed_when: false
+  no_log: false
+
+- name: Log Bedrock connectivity result
+  debug:
+    msg: >-
+      Bedrock connectivity: {{ 'OK — Claude models found' if bedrock_check.rc == 0
+      else 'WARNING — check IAM role has AmazonBedrockFullAccess' }}
+
 - name: Fetch secrets from AWS Secrets Manager
   command: >
     aws secretsmanager get-secret-value

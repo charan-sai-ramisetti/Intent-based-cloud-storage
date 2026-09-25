@@ -1,8 +1,10 @@
 """
 LLM-based intent parser for natural language storage requirements.
 
-This module extracts structured storage constraints from plain English using
-LLM function calling (Anthropic Tool Use / OpenAI Function Calling).
+This module extracts structured storage constraints from plain English using:
+  - AWS Bedrock  → Anthropic Claude 3.5 Sonnet (Tool Use)     [Priority 1 - AWS Credits]
+  - Azure OpenAI → GPT-4o (Function Calling)                  [Priority 2 - Azure Credits]
+  - Rule-Based   → Regex heuristics (offline fallback)         [Priority 3 - Free]
 
 Critical constraint: The LLM only parses requirements into structured JSON.
 Cloud placement decisions are ALWAYS made by the MILP optimizer, never by the LLM.
@@ -12,7 +14,7 @@ import os
 import json
 import time
 import logging
-from typing import Optional, Literal
+from typing import Optional
 from django.conf import settings
 
 from .schemas import StorageIntentInput, ParsedConstraints, IntentParseResult
@@ -20,7 +22,10 @@ from .schemas import StorageIntentInput, ParsedConstraints, IntentParseResult
 logger = logging.getLogger(__name__)
 
 
-# System prompt enforcing the research constraint
+# ---------------------------------------------------------------------------
+# System prompt — shared across all LLM backends
+# ---------------------------------------------------------------------------
+
 INTENT_PARSER_SYSTEM_PROMPT = """You are a storage requirements analyzer for a multi-cloud storage optimization system.
 
 Your ONLY role is to extract structured storage constraints from user text. You do NOT make cloud placement decisions.
@@ -40,6 +45,10 @@ Extract the following from the user's intent:
 CRITICAL: You extract requirements. A separate MILP optimizer makes the actual cloud selection decision.
 Never suggest which cloud provider to use. Only extract what the user needs."""
 
+
+# ---------------------------------------------------------------------------
+# Shared JSON schema used by all tool/function-calling backends
+# ---------------------------------------------------------------------------
 
 CONSTRAINTS_JSON_SCHEMA = {
     "type": "object",
@@ -107,115 +116,235 @@ CONSTRAINTS_JSON_SCHEMA = {
 }
 
 
-def parse_intent_anthropic(user_text: str, file_size_bytes: int) -> tuple[ParsedConstraints, float, float]:
+# ---------------------------------------------------------------------------
+# Helper: read a setting from Django settings or environment fallback
+# ---------------------------------------------------------------------------
+
+def _cfg(key: str, default=None):
+    """Read from Django settings first, then OS environment."""
+    if settings.configured:
+        return getattr(settings, key, None) or os.getenv(key, default)
+    return os.getenv(key, default)
+
+
+# ---------------------------------------------------------------------------
+# Priority 1: AWS Bedrock → Claude 3.5 Sonnet (Tool Use)
+# ---------------------------------------------------------------------------
+
+def parse_intent_bedrock(user_text: str, file_size_bytes: int) -> tuple[ParsedConstraints, float, float]:
     """
-    Parse user intent using Anthropic Claude with Tool Use.
+    Parse user intent using Anthropic Claude via Amazon Bedrock.
+
+    No Anthropic API key required — uses AWS IAM credentials (boto3 default
+    credential chain: instance role → env vars → ~/.aws/credentials).
 
     Returns: (ParsedConstraints, latency_ms, confidence_score)
     """
-    try:
-        from anthropic import Anthropic
+    import boto3
+    import json as _json
 
-        client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-        start = time.perf_counter()
+    region = _cfg("AWS_BEDROCK_REGION", "ap-south-1")
+    model_id = _cfg("AWS_BEDROCK_MODEL_ID", "anthropic.claude-3-5-sonnet-20241022-v2:0")
 
-        prompt = f"""User intent: {user_text}
-File size: {file_size_bytes / (1024**2):.2f} MB
+    bedrock = boto3.client("bedrock-runtime", region_name=region)
 
-Extract storage requirements from this text. Return a JSON object matching the constraints schema."""
+    prompt = (
+        f"User intent: {user_text}\n"
+        f"File size: {file_size_bytes / (1024 ** 2):.2f} MB\n\n"
+        "Extract storage requirements from this text. Use the extract_storage_constraints tool."
+    )
 
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
-            max_tokens=2000,
-            system=INTENT_PARSER_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}],
-            tools=[{
+    request_body = {
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": 2000,
+        "system": INTENT_PARSER_SYSTEM_PROMPT,
+        "messages": [{"role": "user", "content": prompt}],
+        "tools": [{
+            "name": "extract_storage_constraints",
+            "description": "Extract structured storage requirements from user text",
+            "input_schema": CONSTRAINTS_JSON_SCHEMA
+        }],
+        "tool_choice": {"type": "tool", "name": "extract_storage_constraints"}
+    }
+
+    start = time.perf_counter()
+    response = bedrock.invoke_model(
+        modelId=model_id,
+        body=_json.dumps(request_body),
+        contentType="application/json",
+        accept="application/json",
+    )
+    latency_ms = (time.perf_counter() - start) * 1000
+
+    response_body = _json.loads(response["body"].read())
+
+    # Extract tool use block
+    for block in response_body.get("content", []):
+        if block.get("type") == "tool_use" and block.get("name") == "extract_storage_constraints":
+            constraints = ParsedConstraints(**block["input"])
+            stop_reason = response_body.get("stop_reason", "")
+            confidence = 0.95 if stop_reason == "tool_use" else 0.78
+            logger.info(f"[Bedrock] parsed in {latency_ms:.0f}ms, confidence={confidence}")
+            return constraints, latency_ms, confidence
+
+    raise ValueError("No tool_use block in Bedrock response")
+
+
+# ---------------------------------------------------------------------------
+# Priority 2: Azure OpenAI → GPT-4o (Function Calling)
+# ---------------------------------------------------------------------------
+
+def parse_intent_azure_openai(user_text: str, file_size_bytes: int) -> tuple[ParsedConstraints, float, float]:
+    """
+    Parse user intent using GPT-4o via Azure OpenAI Service.
+
+    Uses Azure credits — no OpenAI direct billing.
+    Required env vars:
+      AZURE_OPENAI_ENDPOINT          e.g. https://my-resource.openai.azure.com/
+      AZURE_OPENAI_API_KEY           Key 1 from Azure Portal
+      AZURE_OPENAI_DEPLOYMENT_NAME   e.g. gpt-4o
+      AZURE_OPENAI_API_VERSION       e.g. 2024-08-01-preview
+
+    Returns: (ParsedConstraints, latency_ms, confidence_score)
+    """
+    from openai import AzureOpenAI
+
+    client = AzureOpenAI(
+        azure_endpoint=_cfg("AZURE_OPENAI_ENDPOINT"),
+        api_key=_cfg("AZURE_OPENAI_API_KEY"),
+        api_version=_cfg("AZURE_OPENAI_API_VERSION", "2024-08-01-preview"),
+    )
+
+    deployment = _cfg("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o")
+
+    prompt = (
+        f"User intent: {user_text}\n"
+        f"File size: {file_size_bytes / (1024 ** 2):.2f} MB\n\n"
+        "Extract storage requirements from this text."
+    )
+
+    start = time.perf_counter()
+    response = client.chat.completions.create(
+        model=deployment,
+        messages=[
+            {"role": "system", "content": INTENT_PARSER_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        tools=[{
+            "type": "function",
+            "function": {
                 "name": "extract_storage_constraints",
-                "description": "Extract structured storage requirements from user text",
-                "input_schema": CONSTRAINTS_JSON_SCHEMA
-            }]
-        )
+                "description": "Extract structured storage requirements",
+                "parameters": CONSTRAINTS_JSON_SCHEMA,
+            }
+        }],
+        tool_choice={"type": "function", "function": {"name": "extract_storage_constraints"}},
+    )
+    latency_ms = (time.perf_counter() - start) * 1000
 
-        latency_ms = (time.perf_counter() - start) * 1000
+    choice = response.choices[0]
+    if choice.message.tool_calls:
+        args = json.loads(choice.message.tool_calls[0].function.arguments)
+        constraints = ParsedConstraints(**args)
+        confidence = 0.92 if choice.finish_reason == "tool_calls" else 0.72
+        logger.info(f"[AzureOpenAI] parsed in {latency_ms:.0f}ms, confidence={confidence}")
+        return constraints, latency_ms, confidence
 
-        # Extract tool call result
-        for block in response.content:
-            if block.type == "tool_use" and block.name == "extract_storage_constraints":
-                constraints_dict = block.input
-                constraints = ParsedConstraints(**constraints_dict)
+    raise ValueError("No function call in Azure OpenAI response")
 
-                # Confidence based on stop_reason and presence of required fields
-                confidence = 0.95 if response.stop_reason == "tool_use" else 0.75
 
-                return constraints, latency_ms, confidence
+# ---------------------------------------------------------------------------
+# Legacy direct-API parsers (kept for backward compatibility / local dev)
+# ---------------------------------------------------------------------------
 
-        # Fallback if no tool use
-        raise ValueError("No tool use in Anthropic response")
+def parse_intent_anthropic(user_text: str, file_size_bytes: int) -> tuple[ParsedConstraints, float, float]:
+    """Direct Anthropic API (requires ANTHROPIC_API_KEY). Kept for local dev."""
+    from anthropic import Anthropic
 
-    except Exception as e:
-        logger.error(f"Anthropic parsing failed: {str(e)}")
-        raise
+    client = Anthropic(api_key=_cfg("ANTHROPIC_API_KEY"))
+    prompt = (
+        f"User intent: {user_text}\n"
+        f"File size: {file_size_bytes / (1024**2):.2f} MB\n\n"
+        "Extract storage requirements. Return a JSON object matching the constraints schema."
+    )
+
+    start = time.perf_counter()
+    response = client.messages.create(
+        model="claude-3-5-sonnet-20241022",
+        max_tokens=2000,
+        system=INTENT_PARSER_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": prompt}],
+        tools=[{
+            "name": "extract_storage_constraints",
+            "description": "Extract structured storage requirements from user text",
+            "input_schema": CONSTRAINTS_JSON_SCHEMA
+        }]
+    )
+    latency_ms = (time.perf_counter() - start) * 1000
+
+    for block in response.content:
+        if block.type == "tool_use" and block.name == "extract_storage_constraints":
+            constraints = ParsedConstraints(**block.input)
+            confidence = 0.95 if response.stop_reason == "tool_use" else 0.75
+            return constraints, latency_ms, confidence
+
+    raise ValueError("No tool use in Anthropic response")
 
 
 def parse_intent_openai(user_text: str, file_size_bytes: int) -> tuple[ParsedConstraints, float, float]:
-    """
-    Parse user intent using OpenAI with Function Calling.
+    """Direct OpenAI API (requires OPENAI_API_KEY). Kept for local dev."""
+    from openai import OpenAI
 
-    Returns: (ParsedConstraints, latency_ms, confidence_score)
-    """
-    try:
-        from openai import OpenAI
+    client = OpenAI(api_key=_cfg("OPENAI_API_KEY"))
+    prompt = (
+        f"User intent: {user_text}\n"
+        f"File size: {file_size_bytes / (1024**2):.2f} MB\n\n"
+        "Extract storage requirements from this text."
+    )
 
-        client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        start = time.perf_counter()
+    start = time.perf_counter()
+    response = client.chat.completions.create(
+        model="gpt-4-turbo-preview",
+        messages=[
+            {"role": "system", "content": INTENT_PARSER_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        tools=[{
+            "type": "function",
+            "function": {
+                "name": "extract_storage_constraints",
+                "description": "Extract structured storage requirements",
+                "parameters": CONSTRAINTS_JSON_SCHEMA,
+            }
+        }],
+        tool_choice={"type": "function", "function": {"name": "extract_storage_constraints"}},
+    )
+    latency_ms = (time.perf_counter() - start) * 1000
 
-        prompt = f"""User intent: {user_text}
-File size: {file_size_bytes / (1024**2):.2f} MB
+    if response.choices[0].message.tool_calls:
+        args = json.loads(response.choices[0].message.tool_calls[0].function.arguments)
+        constraints = ParsedConstraints(**args)
+        confidence = 0.92 if response.choices[0].finish_reason == "tool_calls" else 0.70
+        return constraints, latency_ms, confidence
 
-Extract storage requirements from this text."""
+    raise ValueError("No function call in OpenAI response")
 
-        response = client.chat.completions.create(
-            model="gpt-4-turbo-preview",
-            messages=[
-                {"role": "system", "content": INTENT_PARSER_SYSTEM_PROMPT},
-                {"role": "user", "content": prompt}
-            ],
-            tools=[{
-                "type": "function",
-                "function": {
-                    "name": "extract_storage_constraints",
-                    "description": "Extract structured storage requirements",
-                    "parameters": CONSTRAINTS_JSON_SCHEMA
-                }
-            }],
-            tool_choice={"type": "function", "function": {"name": "extract_storage_constraints"}}
-        )
 
-        latency_ms = (time.perf_counter() - start) * 1000
-
-        # Extract function call result
-        if response.choices[0].message.tool_calls:
-            tool_call = response.choices[0].message.tool_calls[0]
-            constraints_dict = json.loads(tool_call.function.arguments)
-            constraints = ParsedConstraints(**constraints_dict)
-
-            confidence = 0.92 if response.choices[0].finish_reason == "tool_calls" else 0.70
-            return constraints, latency_ms, confidence
-
-        raise ValueError("No function call in OpenAI response")
-
-    except Exception as e:
-        logger.error(f"OpenAI parsing failed: {str(e)}")
-        raise
-
+# ---------------------------------------------------------------------------
+# Priority 3: Rule-based heuristic (offline, zero cost)
+# ---------------------------------------------------------------------------
 
 def parse_intent_heuristic(user_text: str, file_size_bytes: int) -> tuple[ParsedConstraints, float, float]:
     """
-    Fallback rule-based heuristic parser for offline operation or LLM API unavailability.
+    Fallback rule-based heuristic parser.
 
-    Uses keyword matching to extract constraints when LLM APIs are down.
+    Uses keyword matching to extract constraints when both LLM backends are
+    unavailable. Runs 100% offline with no API calls.
+
     Returns: (ParsedConstraints, latency_ms, confidence_score)
     """
+    import re
+
     start = time.perf_counter()
     text_lower = user_text.lower()
 
@@ -223,43 +352,44 @@ def parse_intent_heuristic(user_text: str, file_size_bytes: int) -> tuple[Parsed
         "redundancy_level": 1,
         "primary_goal": "BALANCED",
         "access_pattern": "warm",
-        "data_sensitivity": "internal"
+        "data_sensitivity": "internal",
     }
 
-    # Redundancy detection
-    if any(word in text_lower for word in ["backup", "redundant", "replicate", "multiple copies"]):
+    # Redundancy
+    if any(w in text_lower for w in ["backup", "redundant", "replicate", "multiple copies"]):
         constraints_dict["redundancy_level"] = 2
-    if any(word in text_lower for word in ["3 copies", "triple", "maximum redundancy", "three replicas"]):
+    if any(w in text_lower for w in ["3 copies", "triple", "maximum redundancy", "three replicas"]):
         constraints_dict["redundancy_level"] = 3
 
-    # Goal detection
-    if any(word in text_lower for word in ["cheap", "cost", "minimize cost", "lowest price", "budget"]):
+    # Optimization goal
+    if any(w in text_lower for w in ["cheap", "cost", "minimize cost", "lowest price", "budget"]):
         constraints_dict["primary_goal"] = "COST_MINIMIZATION"
-    elif any(word in text_lower for word in ["fast", "low latency", "quick", "speed", "performance"]):
+    elif any(w in text_lower for w in ["fast", "low latency", "quick", "speed", "performance"]):
         constraints_dict["primary_goal"] = "LATENCY_MINIMIZATION"
-    elif any(word in text_lower for word in ["safe", "durable", "reliable", "max redundancy", "cannot lose"]):
+    elif any(w in text_lower for w in ["safe", "durable", "reliable", "max redundancy", "cannot lose"]):
         constraints_dict["primary_goal"] = "MAX_REDUNDANCY"
 
-    # Access pattern detection
-    if any(word in text_lower for word in ["frequent", "daily", "active", "hot"]):
+    # Access pattern
+    if any(w in text_lower for w in ["frequent", "daily", "active", "hot"]):
         constraints_dict["access_pattern"] = "hot"
-    elif any(word in text_lower for word in ["archive", "archival", "rarely", "cold", "backup", "glacier"]):
+    elif any(w in text_lower for w in ["archive", "archival", "rarely", "cold", "backup", "glacier"]):
         constraints_dict["access_pattern"] = "archival"
-    elif any(word in text_lower for word in ["infrequent", "monthly", "occasional", "ia"]):
+    elif any(w in text_lower for w in ["infrequent", "monthly", "occasional", "ia"]):
         constraints_dict["access_pattern"] = "cold"
 
-    # Budget extraction (basic regex)
-    import re
-    budget_match = re.search(r'\$?(\d+(?:\.\d+)?)\s*(?:usd|dollars?)?(?:/mo|monthly|per month)?', text_lower)
+    # Budget (e.g. "$5 per month", "5 usd/mo")
+    budget_match = re.search(
+        r'\$?(\d+(?:\.\d+)?)\s*(?:usd|dollars?)?(?:/mo|monthly|per month)?', text_lower
+    )
     if budget_match:
         constraints_dict["max_budget_monthly_usd"] = float(budget_match.group(1))
 
-    # Latency extraction
+    # Latency (e.g. "50ms", "100 milliseconds")
     latency_match = re.search(r'(\d+)\s*ms|(\d+)\s*milliseconds?', text_lower)
     if latency_match:
         constraints_dict["max_latency_ms"] = int(latency_match.group(1) or latency_match.group(2))
 
-    # Compliance detection
+    # Compliance
     compliance = []
     if "hipaa" in text_lower:
         compliance.append("HIPAA")
@@ -272,61 +402,72 @@ def parse_intent_heuristic(user_text: str, file_size_bytes: int) -> tuple[Parsed
 
     constraints = ParsedConstraints(**constraints_dict)
     latency_ms = (time.perf_counter() - start) * 1000
+    return constraints, latency_ms, 0.60
 
-    # Heuristic confidence is lower
-    confidence = 0.60
 
-    return constraints, latency_ms, confidence
+# ---------------------------------------------------------------------------
+# Main entry point with automatic failover cascade
+# ---------------------------------------------------------------------------
+
+# Provider routing map — order defines priority
+_PROVIDER_MAP = {
+    "bedrock":       parse_intent_bedrock,
+    "azure_openai":  parse_intent_azure_openai,
+    "anthropic":     parse_intent_anthropic,
+    "openai":        parse_intent_openai,
+    "heuristic":     parse_intent_heuristic,
+}
+
+_PROVIDER_MODEL = {
+    "bedrock":       "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "azure_openai":  "gpt-4o",
+    "anthropic":     "claude-3-5-sonnet-20241022",
+    "openai":        "gpt-4-turbo-preview",
+    "heuristic":     "rule-based-v1",
+}
+
+# Automatic failover chain — if primary fails, try these in order
+_FAILOVER_CHAIN = ["bedrock", "azure_openai", "heuristic"]
 
 
 def parse_storage_intent(intent_input: StorageIntentInput) -> IntentParseResult:
     """
     Main entry point for intent parsing.
 
-    Tries the configured LLM provider with automatic fallback to heuristic parser.
+    Priority order (configurable via DEFAULT_LLM_PROVIDER env var):
+      1. bedrock      → AWS Bedrock Claude 3.5 Sonnet   (AWS credits, no Anthropic key)
+      2. azure_openai → Azure OpenAI GPT-4o             (Azure credits, no OpenAI key)
+      3. heuristic    → Regex rule-based fallback        (offline, free)
+
+    Any failure in a higher priority provider automatically falls back to the next.
     """
-    provider = "heuristic"
-    anthropic_key = None
-    openai_key = None
+    primary = _cfg("DEFAULT_LLM_PROVIDER", "bedrock")
 
-    if settings.configured:
-        provider = getattr(settings, "DEFAULT_LLM_PROVIDER", "heuristic")
-        anthropic_key = getattr(settings, "ANTHROPIC_API_KEY", None)
-        openai_key = getattr(settings, "OPENAI_API_KEY", None)
+    # Build the attempt chain: start with the primary, then append failovers (excluding primary)
+    chain = [primary] + [p for p in _FAILOVER_CHAIN if p != primary]
+
+    for provider in chain:
+        parser_fn = _PROVIDER_MAP.get(provider)
+        if parser_fn is None:
+            logger.warning(f"Unknown provider '{provider}', skipping")
+            continue
+
+        try:
+            constraints, latency_ms, confidence = parser_fn(
+                intent_input.user_text, intent_input.file_size_bytes
+            )
+            model = _PROVIDER_MODEL.get(provider, provider)
+            logger.info(f"Intent parsed by '{provider}' in {latency_ms:.0f}ms")
+            break
+
+        except Exception as exc:
+            logger.warning(f"Provider '{provider}' failed: {exc}. Trying next in chain…")
+            continue
     else:
-        provider = os.getenv("DEFAULT_LLM_PROVIDER", "heuristic")
-        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-        openai_key = os.getenv("OPENAI_API_KEY")
-
-    try:
-        if provider == "anthropic" and anthropic_key:
-            constraints, latency_ms, confidence = parse_intent_anthropic(
-                intent_input.user_text,
-                intent_input.file_size_bytes
-            )
-            model = "claude-3-5-sonnet-20241022"
-
-        elif provider == "openai" and openai_key:
-            constraints, latency_ms, confidence = parse_intent_openai(
-                intent_input.user_text,
-                intent_input.file_size_bytes
-            )
-            model = "gpt-4-turbo-preview"
-
-        else:
-            # No API keys or heuristic explicitly chosen
-            constraints, latency_ms, confidence = parse_intent_heuristic(
-                intent_input.user_text,
-                intent_input.file_size_bytes
-            )
-            provider = "heuristic"
-            model = "rule-based-v1"
-
-    except Exception as e:
-        logger.warning(f"LLM parser failed, falling back to heuristic: {str(e)}")
+        # All providers failed — this should never happen because heuristic always succeeds
+        logger.error("All intent parsers failed; using bare heuristic defaults")
         constraints, latency_ms, confidence = parse_intent_heuristic(
-            intent_input.user_text,
-            intent_input.file_size_bytes
+            intent_input.user_text, intent_input.file_size_bytes
         )
         provider = "heuristic"
         model = "rule-based-v1"
@@ -337,5 +478,5 @@ def parse_storage_intent(intent_input: StorageIntentInput) -> IntentParseResult:
         llm_provider=provider,
         llm_model=model,
         parse_latency_ms=latency_ms,
-        confidence_score=confidence
+        confidence_score=confidence,
     )

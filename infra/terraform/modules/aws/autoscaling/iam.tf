@@ -102,6 +102,25 @@ resource "aws_iam_role_policy" "secrets_manager_access" {
   })
 }
 
+# Bedrock access for Claude intent parsing (Claude 3.5 Sonnet via AWS credits)
+resource "aws_iam_role_policy" "bedrock_access" {
+  name = "bedrock-invoke-access"
+  role = aws_iam_role.ec2_ssm_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream",
+        "bedrock:ListFoundationModels"
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
 resource "aws_iam_instance_profile" "ssm_profile" {
   name = "tricloud-ssm-profile"
   role = aws_iam_role.ec2_ssm_role.name
