@@ -14,15 +14,17 @@
     creates: /etc/apt/sources.list.d/caddy-stable.list
   register: caddy_repo_added
 
-- name: Update apt cache
+- name: Update apt cache for Caddy
   apt:
     update_cache: yes
-  when: caddy_repo_added.changed or caddy_gpg_added.changed
+    cache_valid_time: 3600
+    lock_timeout: 600
 
 - name: Install Caddy
   apt:
     name: caddy
     state: present
+    lock_timeout: 600
 
 - name: Set directory permissions for Caddy access
   file:

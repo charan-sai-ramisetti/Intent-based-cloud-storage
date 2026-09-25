@@ -6,6 +6,10 @@ venv_dir: "{{ backend_dir }}/env"
 domain_frontend: tricloudvault.charansai.me
 domain_backend: tricloudvault1.charansai.me
 
+# Default Superuser Credentials (can be overridden in Secrets Manager)
+superuser_email: "{{ app_secrets.SUPERUSER_EMAIL | default('admin@tricloudvault.com') }}"
+superuser_password: "{{ app_secrets.SUPERUSER_PASSWORD | default('AdminPassword123!') }}"
+
 # SSM connection
 ansible_connection: amazon.aws.aws_ssm
 ansible_aws_ssm_region: ap-south-1
