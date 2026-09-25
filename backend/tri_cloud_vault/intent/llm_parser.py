@@ -356,17 +356,17 @@ def parse_intent_heuristic(user_text: str, file_size_bytes: int) -> tuple[Parsed
     }
 
     # Redundancy
-    if any(w in text_lower for w in ["backup", "redundant", "replicate", "multiple copies"]):
-        constraints_dict["redundancy_level"] = 2
-    if any(w in text_lower for w in ["3 copies", "triple", "maximum redundancy", "three replicas"]):
+    if any(w in text_lower for w in ["3 copies", "three copies", "triple", "maximum redundancy", "three replicas", "3 replicas", "3 clouds", "three clouds", "all 3 clouds", "across 3 clouds", "all clouds", "3 providers", "three providers"]):
         constraints_dict["redundancy_level"] = 3
+    elif any(w in text_lower for w in ["backup", "redundant", "replicate", "multiple copies", "2 copies", "two copies", "2 clouds", "two clouds", "dual cloud", "multi cloud", "multicloud", "two replicas", "2 replicas", "2 providers", "two providers"]):
+        constraints_dict["redundancy_level"] = 2
 
     # Optimization goal
-    if any(w in text_lower for w in ["cheap", "cost", "minimize cost", "lowest price", "budget"]):
+    if any(w in text_lower for w in ["cheap", "cost", "minimize cost", "lowest price", "cheapest"]):
         constraints_dict["primary_goal"] = "COST_MINIMIZATION"
-    elif any(w in text_lower for w in ["fast", "low latency", "quick", "speed", "performance"]):
+    elif any(w in text_lower for w in ["fast", "low latency", "quick", "speed", "performance", "ultra low latency"]):
         constraints_dict["primary_goal"] = "LATENCY_MINIMIZATION"
-    elif any(w in text_lower for w in ["safe", "durable", "reliable", "max redundancy", "cannot lose"]):
+    elif any(w in text_lower for w in ["safe", "durable", "reliable", "max redundancy", "cannot lose", "high available", "high availability", "ha", "fault tolerant", "fault tolerance", "zero downtime", "resilient"]):
         constraints_dict["primary_goal"] = "MAX_REDUNDANCY"
 
     # Access pattern
@@ -377,9 +377,12 @@ def parse_intent_heuristic(user_text: str, file_size_bytes: int) -> tuple[Parsed
     elif any(w in text_lower for w in ["infrequent", "monthly", "occasional", "ia"]):
         constraints_dict["access_pattern"] = "cold"
 
-    # Budget (e.g. "$5 per month", "5 usd/mo")
-    budget_match = re.search(
-        r'\$?(\d+(?:\.\d+)?)\s*(?:usd|dollars?)?(?:/mo|monthly|per month)?', text_lower
+    # Budget (requires explicit currency symbol, currency name, or budget phrase)
+    budget_match = (
+        re.search(r'\$\s*(\d+(?:\.\d+)?)', text_lower)
+        or re.search(r'(\d+(?:\.\d+)?)\s*(?:usd|dollars?)', text_lower)
+        or re.search(r'(?:budget|cost|price|limit)\s*(?:is|of|under|<=|:)?\s*\$?(\d+(?:\.\d+)?)', text_lower)
+        or re.search(r'(\d+(?:\.\d+)?)\s*(?:/mo|monthly|per month)', text_lower)
     )
     if budget_match:
         constraints_dict["max_budget_monthly_usd"] = float(budget_match.group(1))

@@ -48,6 +48,14 @@ class IntentHeuristicTests(unittest.TestCase):
         self.assertIn("HIPAA", constraints.compliance_requirements)
         self.assertEqual(constraints.primary_goal, "MAX_REDUNDANCY")
 
+    def test_high_available_3_clouds(self):
+        """Verify 'high available data in 3 clouds' parses to 3 replicas with MAX_REDUNDANCY and no fake budget."""
+        text = "high available data in 3 clouds"
+        constraints, latency_ms, conf = parse_intent_heuristic(text, file_size_bytes=100 * 1024 * 1024)
+        self.assertEqual(constraints.redundancy_level, 3)
+        self.assertEqual(constraints.primary_goal, "MAX_REDUNDANCY")
+        self.assertIsNone(constraints.max_budget_monthly_usd)
+
 
 class IntentFallbackFlowTests(unittest.TestCase):
     """Tests for the main parse_storage_intent fallback cascade."""
