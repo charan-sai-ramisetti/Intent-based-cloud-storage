@@ -1,3 +1,12 @@
+- name: Wait for automatic system updates / apt locks to release
+  shell: |
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
+          fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || \
+          fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
+      sleep 3
+    done
+  changed_when: false
+
 - name: Install packages
   apt:
     name:
@@ -7,4 +16,7 @@
       - git
       - curl
       - awscli
+    state: present
     update_cache: yes
+    cache_valid_time: 3600
+    lock_timeout: 600
