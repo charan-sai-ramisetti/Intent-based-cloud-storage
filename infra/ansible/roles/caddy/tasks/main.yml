@@ -1,3 +1,13 @@
+- name: Install prerequisite packages for Caddy
+  apt:
+    name:
+      - debian-keyring
+      - debian-archive-keyring
+      - apt-transport-https
+      - curl
+    state: present
+    lock_timeout: 600
+
 - name: Add Caddy GPG key
   shell: |
     curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/gpg.key \
@@ -14,10 +24,9 @@
     creates: /etc/apt/sources.list.d/caddy-stable.list
   register: caddy_repo_added
 
-- name: Update apt cache for Caddy
+- name: Force update apt cache after adding Caddy repo
   apt:
     update_cache: yes
-    cache_valid_time: 3600
     lock_timeout: 600
 
 - name: Install Caddy
