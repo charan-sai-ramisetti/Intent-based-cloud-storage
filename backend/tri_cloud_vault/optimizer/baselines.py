@@ -48,8 +48,9 @@ def run_all_baselines(file_size_bytes: int, constraints: ParsedConstraints) -> d
     """
     file_size_gb = file_size_bytes / (1024 ** 3)
 
+from django.conf import settings
     # Load parameters
-    param_path = os.path.join(os.path.dirname(__file__), '..', '..', 'research/data/optimizer/cloud_parameters.csv')
+    param_path = settings.BASE_DIR.parent.parent / 'research/data/optimizer/cloud_parameters.csv'
     df = pd.read_csv(param_path)
 
     # Baseline 1: Single Cloud AWS (Standard)

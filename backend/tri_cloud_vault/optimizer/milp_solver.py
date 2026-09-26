@@ -76,8 +76,9 @@ def solve_optimal_placement(
         if allowed_clouds:
             available_clouds = [c for c in clouds if c in allowed_clouds]
 
+from django.conf import settings
     # Load parameters from generated CSV
-    param_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'research/data/optimizer/cloud_parameters.csv')
+    param_path = settings.BASE_DIR.parent.parent / 'research/data/optimizer/cloud_parameters.csv'
     param_df = pd.read_csv(param_path)
 
     # Pre-calculate costs and latencies for all combinations
