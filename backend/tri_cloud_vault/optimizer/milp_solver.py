@@ -16,6 +16,7 @@ import time
 import logging
 from typing import Dict, List, Tuple, Optional
 from pulp import LpProblem, LpMinimize, LpVariable, LpBinary, lpSum, PULP_CBC_CMD, LpStatus
+from django.conf import settings
 
 from intent.schemas import ParsedConstraints, OptimizationRecommendation
 from optimizer.cost_matrix import estimate_access_operations
@@ -76,7 +77,6 @@ def solve_optimal_placement(
         if allowed_clouds:
             available_clouds = [c for c in clouds if c in allowed_clouds]
 
-from django.conf import settings
     # Load parameters from generated CSV
     param_path = settings.BASE_DIR.parent.parent / 'research/data/optimizer/cloud_parameters.csv'
     param_df = pd.read_csv(param_path)

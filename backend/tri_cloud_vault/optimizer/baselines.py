@@ -48,7 +48,7 @@ def run_all_baselines(file_size_bytes: int, constraints: ParsedConstraints) -> d
     """
     file_size_gb = file_size_bytes / (1024 ** 3)
 
-from django.conf import settings
+    from django.conf import settings
     # Load parameters
     param_path = settings.BASE_DIR.parent.parent / 'research/data/optimizer/cloud_parameters.csv'
     df = pd.read_csv(param_path)
