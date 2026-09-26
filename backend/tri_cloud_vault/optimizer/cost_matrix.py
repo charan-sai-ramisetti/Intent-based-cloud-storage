@@ -6,7 +6,7 @@ access patterns, and cloud provider pricing.
 """
 
 from typing import Dict, Tuple
-from telemetry.pricing_table import get_pricing_for_cloud
+from backend.tri_cloud_vault.telemetry.pricing_table import get_pricing_for_cloud
 
 
 def calculate_monthly_cost(

@@ -10,14 +10,15 @@ Critical architectural principle: The LLM never makes cloud decisions. This MILP
 is the ONLY component that decides which clouds and tiers to use.
 """
 
+import os
+import pandas as pd
 import time
 import logging
 from typing import Dict, List, Tuple, Optional
 from pulp import LpProblem, LpMinimize, LpVariable, LpBinary, lpSum, PULP_CBC_CMD, LpStatus
 
-from intent.schemas import ParsedConstraints, OptimizationRecommendation
-from telemetry.pricing_table import get_pricing_for_cloud, DEFAULT_PRICING_TABLE
-from optimizer.cost_matrix import calculate_monthly_cost, estimate_access_operations
+from backend.tri_cloud_vault.intent.schemas import ParsedConstraints, OptimizationRecommendation
+from backend.tri_cloud_vault.optimizer.cost_matrix import estimate_access_operations
 
 logger = logging.getLogger(__name__)
 
@@ -75,27 +76,38 @@ def solve_optimal_placement(
         if allowed_clouds:
             available_clouds = [c for c in clouds if c in allowed_clouds]
 
+    # Load parameters from generated CSV
+    param_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'research/data/optimizer/cloud_parameters.csv')
+    param_df = pd.read_csv(param_path)
+
     # Pre-calculate costs and latencies for all combinations
     costs = {}
     latencies = {}
 
-    for cloud in available_clouds:
-        for tier in tiers:
-            try:
-                pricing = get_pricing_for_cloud(cloud, tier)
-                cost_breakdown = calculate_monthly_cost(
-                    cloud=cloud,
-                    tier=tier,
-                    file_size_gb=file_size_gb,
-                    monthly_reads=monthly_reads,
-                    monthly_writes=monthly_writes,
-                    egress_gb=egress_gb
-                )
-                costs[(cloud, tier)] = cost_breakdown["total"]
-                latencies[(cloud, tier)] = pricing["latency_typical_ms"]
-            except Exception as e:
-                logger.warning(f"Skipping {cloud}/{tier}: {e}")
-                continue
+    for _, row in param_df.iterrows():
+        cloud = row['cloud']
+        tier = row['storage_tier']
+
+        # Ensure cloud is in available_clouds
+        if cloud not in available_clouds:
+            continue
+
+        # Calculate total monthly cost
+        monthly_reads, monthly_writes, egress_gb = estimate_access_operations(
+            file_size_gb,
+            constraints.access_pattern,
+            constraints.expected_monthly_reads
+        )
+
+        cost_breakdown = {
+            "storage": file_size_gb * row['storage_cost_usd_gb_month'],
+            "operations": (monthly_reads / 10000 * row['get_cost_usd_10k']) + (monthly_writes / 10000 * row['put_cost_usd_10k']),
+            "egress": egress_gb * row['egress_cost_usd_gb']
+        }
+        cost_breakdown["total"] = sum(cost_breakdown.values())
+
+        costs[(cloud, tier)] = cost_breakdown["total"]
+        latencies[(cloud, tier)] = row['latency_ms']
 
     if not costs:
         raise ValueError("No valid cloud/tier combinations available")

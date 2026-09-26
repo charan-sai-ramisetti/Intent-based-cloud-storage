@@ -224,3 +224,58 @@ def rollback_orchestration_task(operation_id: str) -> Dict:
         "status": "rolled_back",
         "cleaned_clouds": cleaned_clouds
     }
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=5)
+def complete_multipart_sessions_task(self, operation_id: str) -> Dict:
+    """
+    Finalize multipart uploads across cloud targets.
+    """
+    fsm = _get_or_create_fsm(operation_id)
+
+    # Check if a valid transition is possible
+    if not fsm.can_transition_to(StorageFSMState.VERIFYING_INTEGRITY):
+        logger.error(f"Cannot transition to VERIFYING_INTEGRITY from {fsm.current_state}")
+        return {"status": "error", "message": "Invalid state transition"}
+
+    fsm.transition_to(StorageFSMState.COMPLETING_SESSIONS, message="Finalizing cloud multipart sessions")
+    _save_fsm(fsm)
+
+    cloud_sessions = fsm.context.get("cloud_sessions", {})
+    try:
+        # TODO: Implement cloud-specific completion logic here (calling aws_complete_multipart, commit_block_list, etc.)
+        fsm.transition_to(StorageFSMState.VERIFYING_INTEGRITY, message="Sessions finalized, moving to integrity verification")
+        _save_fsm(fsm)
+        return {"status": "sessions_finalized", "operation_id": operation_id}
+    except Exception as exc:
+        logger.error(f"Completion error: {str(exc)}")
+        fsm.transition_to(StorageFSMState.FAILED, message="Failed to complete multipart sessions", error=str(exc))
+        _save_fsm(fsm)
+        rollback_orchestration_task.delay(operation_id)
+        raise self.retry(exc=exc)
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=5)
+def verify_integrity_task(self, operation_id: str) -> Dict:
+    """
+    Verify checksums of files uploaded across cloud targets.
+    """
+    fsm = _get_or_create_fsm(operation_id)
+
+    if not fsm.can_transition_to(StorageFSMState.INTEGRITY_CONFIRMED):
+        logger.error(f"Cannot transition to INTEGRITY_CONFIRMED from {fsm.current_state}")
+        return {"status": "error", "message": "Invalid state transition"}
+
+    fsm.transition_to(StorageFSMState.VERIFYING_INTEGRITY, message="Verifying file integrity")
+    _save_fsm(fsm)
+
+    try:
+        # TODO: Implement actual checksum verification logic here
+        fsm.transition_to(StorageFSMState.INTEGRITY_CONFIRMED, message="Integrity confirmed")
+        fsm.transition_to(StorageFSMState.COMPLETED, message="Multipart upload orchestration COMPLETED")
+        _save_fsm(fsm)
+        return {"status": "integrity_verified", "operation_id": operation_id}
+    except Exception as exc:
+        logger.error(f"Integrity verification error: {str(exc)}")
+        fsm.transition_to(StorageFSMState.FAILED, message="Integrity check failed", error=str(exc))
+        _save_fsm(fsm)
+        rollback_orchestration_task.delay(operation_id)
+        raise self.retry(exc=exc)

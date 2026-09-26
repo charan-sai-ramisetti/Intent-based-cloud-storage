@@ -138,7 +138,7 @@ class IntentParseResult(BaseModel):
     parsed_constraints: ParsedConstraints
     recommendation: Optional[OptimizationRecommendation] = None
 
-    llm_provider: Literal["anthropic", "openai", "heuristic"]
+    llm_provider: Literal["bedrock", "azure_openai", "anthropic", "openai", "heuristic"]
     llm_model: Optional[str] = None
     parse_latency_ms: float
     confidence_score: float = Field(ge=0.0, le=1.0)

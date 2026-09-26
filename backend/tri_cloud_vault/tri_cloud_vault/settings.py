@@ -254,13 +254,25 @@ EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
 DEFAULT_FROM_EMAIL = "TriCloud Vault <charansairamisetti@gmail.com>"
 
 # --------------------------------------------------
-# SECURITY HEADERS
+# SECURITY HEADERS & HSTS
 # --------------------------------------------------
 
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
+
+# Production hardening (only if not DEBUG)
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_REFERRER_POLICY = 'same-origin'
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
 
 # --------------------------------------------------
 # CELERY & REDIS
