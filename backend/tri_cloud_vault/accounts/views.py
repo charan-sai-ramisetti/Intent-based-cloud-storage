@@ -144,7 +144,14 @@ class LoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        user = authenticate(request, username=email, password=password)
+        try:
+            user = authenticate(request, username=email, password=password)
+        except Exception as e:
+            logger.error(f"Authentication exception: {str(e)}", exc_info=True)
+            return Response(
+                {"error": "Authentication system error", "details": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
         if not user:
             return Response(

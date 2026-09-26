@@ -17,8 +17,8 @@ import logging
 from typing import Dict, List, Tuple, Optional
 from pulp import LpProblem, LpMinimize, LpVariable, LpBinary, lpSum, PULP_CBC_CMD, LpStatus
 
-from backend.tri_cloud_vault.intent.schemas import ParsedConstraints, OptimizationRecommendation
-from backend.tri_cloud_vault.optimizer.cost_matrix import estimate_access_operations
+from intent.schemas import ParsedConstraints, OptimizationRecommendation
+from optimizer.cost_matrix import estimate_access_operations
 
 logger = logging.getLogger(__name__)
 
