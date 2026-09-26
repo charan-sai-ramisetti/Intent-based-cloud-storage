@@ -53,21 +53,28 @@ function resetUploadForm() {
 /* ===============================
    CREATE STATUS BOX
 ================================ */
-function createStatusBox(file, cloud) {
-  const container = document.getElementById("upload-status-container");
+function createStatusBox(file, cloud, targetContainer) {
+  const container = targetContainer || document.getElementById("upload-status-container");
+  if (!container) return null;
+
   let title = container.querySelector(".upload-title");
   if (!title) {
     title = document.createElement("div");
-    title.className = "upload-title";
-    title.innerHTML = `<strong>${file.name}</strong>`;
+    title.className = "upload-title mb-2";
+    title.innerHTML = `<strong>${file.name}</strong> <span class="text-muted small">(${(file.size / (1024 * 1024)).toFixed(2)} MB)</span>`;
     container.appendChild(title);
   }
+
   const statusBox = document.createElement("div");
-  statusBox.className = "upload-status";
+  statusBox.className = "upload-status mb-2 p-2 border rounded bg-white shadow-sm";
   statusBox.innerHTML = `
-    <strong>${cloud}</strong>
-    <div class="progress-bar"><div class="progress"></div></div>
-    <div class="status-text">Uploading… 0%</div>
+    <div class="d-flex justify-content-between align-items-center mb-1">
+      <strong class="text-primary">${cloud}</strong>
+      <span class="status-text small text-muted">Starting… 0%</span>
+    </div>
+    <div class="progress" style="height: 6px;">
+      <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width: 0%"></div>
+    </div>
   `;
   container.appendChild(statusBox);
   return statusBox;
@@ -75,7 +82,38 @@ function createStatusBox(file, cloud) {
 
 
 /* ===============================
-   START UPLOAD
+   DIRECT UPLOAD (REUSABLE PIPELINE)
+================================ */
+function startDirectUpload(file, clouds, targetContainer) {
+  const container = targetContainer || document.getElementById("upload-status-container");
+  if (container) container.innerHTML = "";
+
+  return fetch(`${API_BASE_URL}/files/presign/upload/`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      file_name: file.name,
+      file_size: file.size,
+      file_type: file.type || "application/octet-stream",
+      clouds: clouds
+    })
+  })
+    .then(res => {
+      if (!res.ok) throw new Error("Failed to generate presigned upload URLs");
+      return res.json();
+    })
+    .then(data => {
+      if (data.upload_type === "single") {
+        return startSingleUpload(file, clouds, data, container);
+      } else {
+        return startMultipartUpload(file, clouds, container);
+      }
+    });
+}
+
+
+/* ===============================
+   START MANUAL UPLOAD
 ================================ */
 function startUpload() {
   setUploadButton(true, "Uploading...");
@@ -97,27 +135,10 @@ function startUpload() {
   const file = fileInput.files[0];
   const clouds = Array.from(selectedClouds).map(cb => cb.value);
 
-  fetch(`${API_BASE_URL}/files/presign/upload/`, {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify({
-      file_name: file.name,
-      file_size: file.size,
-      file_type: file.type,
-      clouds: clouds
-    })
-  })
-    .then(res => res.json())
-    .then(data => {
-      if (data.upload_type === "single") {
-        startSingleUpload(file, clouds, data);
-      } else {
-        startMultipartUpload(file, clouds);
-      }
-    })
+  startDirectUpload(file, clouds, document.getElementById("upload-status-container"))
     .catch(err => {
-      console.error(err);
-      alert("Upload failed");
+      console.error("Upload error:", err);
+      alert("Upload failed: " + (err.message || err));
       setUploadButton(false, "Upload");
     });
 }
@@ -126,13 +147,13 @@ function startUpload() {
 /* ===============================
    SINGLE UPLOAD
 ================================ */
-function startSingleUpload(file, clouds, data) {
+function startSingleUpload(file, clouds, data, targetContainer) {
   uploadResults = {};
   clouds.forEach(c => uploadResults[c] = false);
   lastUploadMeta = { file_name: file.name, file_size: file.size, aws_path: null, azure_path: null, gcp_path: null };
 
   const uploads = clouds.map(cloud => {
-    const box = createStatusBox(file, cloud);
+    const box = createStatusBox(file, cloud, targetContainer);
     return uploadSingleFile(file, cloud, data.upload_urls[cloud], box)
       .then(() => {
         uploadResults[cloud] = true;
@@ -142,14 +163,14 @@ function startSingleUpload(file, clouds, data) {
       });
   });
 
-  Promise.allSettled(uploads).then(() => {
+  return Promise.allSettled(uploads).then(() => {
     const success = Object.keys(uploadResults).filter(c => uploadResults[c]);
     if (success.length === 0) {
-      alert("Upload failed");
+      alert("Upload failed for all selected clouds.");
       setUploadButton(false, "Upload");
-      return;
+      throw new Error("Upload failed for all selected clouds.");
     }
-    confirmUpload(success);
+    return confirmUpload(success, targetContainer);
   });
 }
 
@@ -159,8 +180,8 @@ function startSingleUpload(file, clouds, data) {
 ================================ */
 function uploadSingleFile(file, cloud, uploadUrl, statusBox) {
   return new Promise((resolve, reject) => {
-    const progressEl = statusBox.querySelector(".progress");
-    const statusText = statusBox.querySelector(".status-text");
+    const progressEl = statusBox ? statusBox.querySelector(".progress-bar") : null;
+    const statusText = statusBox ? statusBox.querySelector(".status-text") : null;
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", uploadUrl, true);
 
@@ -169,12 +190,7 @@ function uploadSingleFile(file, cloud, uploadUrl, statusBox) {
       xhr.setRequestHeader("x-ms-blob-type", "BlockBlob");
     }
 
-    // GCP signed URLs include content_type="application/octet-stream" in the
-    // signature. GCS validates that the Content-Type header in the request
-    // EXACTLY matches what was signed — if it is missing or different, GCS
-    // rejects with 403 MalformedSecurityHeader: "Header was included in
-    // signedheaders, but not in the request. ParameterName: content-type".
-    // This was the root cause of the 403 error seen in production.
+    // GCP signed URLs include content_type="application/octet-stream" in the signature.
     if (cloud === "GCP") {
       xhr.setRequestHeader("Content-Type", "application/octet-stream");
     }
@@ -182,29 +198,31 @@ function uploadSingleFile(file, cloud, uploadUrl, statusBox) {
     xhr.upload.onprogress = e => {
       if (e.lengthComputable) {
         const percent = Math.round((e.loaded / e.total) * 100);
-        progressEl.style.width = percent + "%";
-        statusText.innerText = `Uploading… ${percent}%`;
+        if (progressEl) progressEl.style.width = percent + "%";
+        if (statusText) statusText.innerText = `Uploading… ${percent}%`;
       }
     };
 
     xhr.onload = () => {
       if (xhr.status === 200 || xhr.status === 201) {
-        progressEl.style.width = "100%";
-        statusText.innerText = "Uploaded";
+        if (progressEl) {
+          progressEl.style.width = "100%";
+          progressEl.classList.remove("progress-bar-animated");
+          progressEl.classList.add("bg-success");
+        }
+        if (statusText) statusText.innerText = "Uploaded 100%";
         resolve();
       } else {
-        statusText.innerText = "Failed";
-        reject();
+        if (statusText) statusText.innerText = `Failed (HTTP ${xhr.status})`;
+        reject(new Error(`HTTP ${xhr.status}`));
       }
     };
 
-    xhr.onerror = () => { statusText.innerText = "Failed"; reject(); };
+    xhr.onerror = () => {
+      if (statusText) statusText.innerText = "Network Error";
+      reject(new Error("Network Error"));
+    };
 
-    // GCP signed URLs lock content-type="application/octet-stream" into the
-    // signature. Sending a raw File object causes the browser to override the
-    // Content-Type header with the file's real MIME type (e.g. text/javascript),
-    // breaking the signature check with 403 MalformedSecurityHeader.
-    // Wrapping in a typed Blob prevents the browser from inferring MIME type.
     const body = (cloud === "GCP") ? new Blob([file], { type: "application/octet-stream" }) : file;
     xhr.send(body);
   });
@@ -214,10 +232,10 @@ function uploadSingleFile(file, cloud, uploadUrl, statusBox) {
 /* ===============================
    MULTIPART UPLOAD
 ================================ */
-async function startMultipartUpload(file, clouds) {
+async function startMultipartUpload(file, clouds, targetContainer) {
   lastUploadMeta = { file_name: file.name, file_size: file.size, aws_path: null, azure_path: null, gcp_path: null };
 
-  const uploads = clouds.map(cloud => multipartForCloud(file, cloud));
+  const uploads = clouds.map(cloud => multipartForCloud(file, cloud, targetContainer));
   const results = await Promise.allSettled(uploads);
   const success = [];
   results.forEach((r, i) => { if (r.status === "fulfilled") success.push(clouds[i]); });
@@ -225,30 +243,29 @@ async function startMultipartUpload(file, clouds) {
   if (success.length === 0) {
     alert("Upload failed. Check your connection and try again.");
     setUploadButton(false, "Upload");
-    return;
+    throw new Error("Multipart upload failed for all selected clouds.");
   }
-  confirmUpload(success);
+  return confirmUpload(success, targetContainer);
 }
 
 
 /* ===============================
    MULTIPART PER CLOUD
 ================================ */
-async function multipartForCloud(file, cloud) {
-  const statusBox = createStatusBox(file, cloud);
-  const progressEl = statusBox.querySelector(".progress");
-  const statusText = statusBox.querySelector(".status-text");
+async function multipartForCloud(file, cloud, targetContainer) {
+  const statusBox = createStatusBox(file, cloud, targetContainer);
+  const progressEl = statusBox ? statusBox.querySelector(".progress-bar") : null;
+  const statusText = statusBox ? statusBox.querySelector(".status-text") : null;
 
   const start = await fetch(`${API_BASE_URL}/files/multipart/start/`, {
     method: "POST",
     headers: authHeaders(),
-    body: JSON.stringify({ file_name: file.name, file_type: file.type, cloud: cloud })
+    body: JSON.stringify({ file_name: file.name, file_type: file.type || "application/octet-stream", cloud: cloud })
   });
+  if (!start.ok) throw new Error(`Failed to initialize multipart upload on ${cloud}`);
   const startData = await start.json();
 
   // GCP: POST to the signed RESUMABLE URL to initiate the session.
-  // GCS responds with the session URI in the Location header.
-  // All subsequent chunk PUTs go to that session URI.
   if (cloud === "GCP") {
     const initRes = await fetch(startData.upload_url, {
       method: "POST",
@@ -269,17 +286,12 @@ async function multipartForCloud(file, cloud) {
   function onChunkProgress(chunkIndex, bytesLoaded) {
     bytesUploadedPerChunk[chunkIndex] = bytesLoaded;
     const totalUploaded = bytesUploadedPerChunk.reduce((a, b) => a + b, 0);
-    // Cap at 99% until the commit step succeeds so progress doesn't show
-    // 100% before the multipart complete call has confirmed the upload
     const percent = Math.min(99, Math.round((totalUploaded / file.size) * 100));
-    progressEl.style.width = percent + "%";
-    statusText.innerText = `Uploading… ${percent}%`;
+    if (progressEl) progressEl.style.width = percent + "%";
+    if (statusText) statusText.innerText = `Uploading… ${percent}%`;
   }
 
   const parts = [];
-
-  // GCS resumable uploads are strictly sequential — parallel chunks cause
-  // "upload offset exceeds already uploaded size". AWS/Azure support parallel.
   const concurrency = (cloud === "GCP") ? 1 : MAX_PARALLEL_UPLOADS;
 
   for (let i = 0; i < totalChunks; i += concurrency) {
@@ -316,18 +328,18 @@ async function multipartForCloud(file, cloud) {
     lastUploadMeta.gcp_path = startData.blob_name;
   }
 
-  progressEl.style.width = "100%";
-  statusText.innerText = "Uploaded";
+  if (progressEl) {
+    progressEl.style.width = "100%";
+    progressEl.classList.remove("progress-bar-animated");
+    progressEl.classList.add("bg-success");
+  }
+  if (statusText) statusText.innerText = "Uploaded 100%";
 }
 
 
 /* ===============================
    UPLOAD CHUNK WITH RETRY
 ================================ */
-// Wraps uploadChunk with exponential backoff. Each retry fetches a fresh
-// presigned URL so a broken connection on the previous attempt doesn't
-// affect the new one. Progress is reset to 0 on each retry to prevent
-// the bar from showing phantom bytes from a failed partial upload.
 async function uploadChunkWithRetry(file, cloud, startData, index, onProgress) {
   let lastError;
   for (let attempt = 1; attempt <= MAX_CHUNK_RETRIES; attempt++) {
@@ -366,17 +378,13 @@ function uploadChunk(file, cloud, startData, index, onProgress) {
       }
 
       if (cloud === "AZURE") {
-        // Block ID must be base64-encoded and consistent between presign and commit
         blockId = btoa(String(index + 1).padStart(6, "0"));
         payload = { cloud, blob_name: startData.blob_name, block_id: blockId };
       }
 
-      // GCP: stream chunk directly to the session URI using the resumable
-      // upload protocol. Does NOT use the presign-part endpoint.
-      // GCS returns 308 Resume Incomplete until the final chunk (200/201).
       if (cloud === "GCP") {
         const sessionUri = startData.upload_url;
-        const fileSize   = file.size;
+        const fileSize = file.size;
         const xhr = new XMLHttpRequest();
         xhr.open("PUT", sessionUri, true);
         xhr.setRequestHeader("Content-Type", "application/octet-stream");
@@ -397,8 +405,6 @@ function uploadChunk(file, cloud, startData, index, onProgress) {
         return;
       }
 
-      // Fresh URL on every call — if this is a retry, the previous URL may be
-      // associated with a closed TCP connection on the server side
       const presign = await fetch(`${API_BASE_URL}/files/multipart/presign-part/`, {
         method: "POST",
         headers: authHeaders(),
@@ -410,10 +416,6 @@ function uploadChunk(file, cloud, startData, index, onProgress) {
 
       const xhr = new XMLHttpRequest();
       xhr.open("PUT", presignData.url, true);
-
-      // Do NOT set x-ms-blob-type on block part uploads (?comp=block) —
-      // it is only valid on single-blob PUTs and will cause Azure to reject
-      // block uploads if present
 
       xhr.upload.onprogress = e => {
         if (e.lengthComputable && onProgress) onProgress(index, e.loaded);
@@ -443,26 +445,42 @@ function uploadChunk(file, cloud, startData, index, onProgress) {
 /* ===============================
    CONFIRM UPLOAD
 ================================ */
-function confirmUpload(successClouds) {
-  const payload = { file_name: lastUploadMeta.file_name, file_size: lastUploadMeta.file_size };
+function confirmUpload(successClouds, targetContainer) {
+  const payload = {
+    file_name: lastUploadMeta.file_name,
+    file_size: lastUploadMeta.file_size
+  };
   if (successClouds.includes("AWS")) payload.aws_path = lastUploadMeta.aws_path;
   if (successClouds.includes("AZURE")) payload.azure_path = lastUploadMeta.azure_path;
   if (successClouds.includes("GCP")) payload.gcp_path = lastUploadMeta.gcp_path;
 
-  fetch(`${API_BASE_URL}/files/confirm-upload/`, {
+  return fetch(`${API_BASE_URL}/files/confirm-upload/`, {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify(payload)
   })
-    .then(() => {
-      loadFiles(); loadRecentFiles(); loadFolders(); loadStorageSummary();
-      resetUploadForm();
-      document.getElementById("upload-status-container").innerHTML = "";
-      setUploadButton(false, "Upload");
+    .then(res => {
+      if (!res.ok) throw new Error("Failed to confirm file registration in database");
+      return res.json();
     })
-    .catch(() => {
+    .then(data => {
+      if (typeof loadFiles === "function") loadFiles();
+      if (typeof loadRecentFiles === "function") loadRecentFiles();
+      if (typeof loadFolders === "function") loadFolders();
+      if (typeof loadStorageSummary === "function") loadStorageSummary();
+      resetUploadForm();
+      const statusCont = targetContainer || document.getElementById("upload-status-container");
+      if (statusCont) {
+        statusCont.innerHTML = `<div class="alert alert-success py-2"><strong>Success!</strong> File uploaded and registered across: ${successClouds.join(", ")}</div>`;
+      }
+      setUploadButton(false, "Upload");
+      return data;
+    })
+    .catch(err => {
+      console.error("Confirm upload error:", err);
       alert("Upload verification failed");
       setUploadButton(false, "Upload");
+      throw err;
     });
 }
 

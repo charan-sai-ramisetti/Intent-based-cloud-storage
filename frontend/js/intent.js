@@ -166,66 +166,63 @@ function renderOptimizationResults(data) {
 }
 
 /**
- * Execute the optimized upload using presigned URLs or FSM async task.
+ * Execute the optimized upload using presigned direct-to-cloud streams and DB registration.
  */
 async function executeOptimizedUpload() {
-  if (!currentIntentLogId) {
+  if (!currentOptimizationResult || !currentOptimizationResult.recommendation) {
     alert("Please parse and optimize your storage intent first.");
     return;
   }
 
   const intentFile = document.getElementById("intentFileInput");
   if (!intentFile || intentFile.files.length === 0) {
-    alert("Please choose a file to upload.");
+    alert("Please choose a file to upload in the file input next to the intent prompt.");
     return;
   }
 
   const file = intentFile.files[0];
   const execBtn = document.getElementById("execute-upload-btn");
   const execStatus = document.getElementById("execution-status-message");
+  const selectedClouds = currentOptimizationResult.recommendation.selected_clouds;
+
+  if (!selectedClouds || selectedClouds.length === 0) {
+    alert("No cloud targets found in optimization recommendation.");
+    return;
+  }
 
   execBtn.disabled = true;
-  execBtn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status"></span> Executing Multi-Cloud Upload...`;
-  execStatus.innerHTML = `<div class="alert alert-info py-2">Triggering Celery FSM orchestration across selected providers...</div>`;
+  execBtn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status"></span> Replicating to ${selectedClouds.join(", ")}...`;
+  execStatus.innerHTML = `<div class="alert alert-info py-2">Streaming file directly to ${selectedClouds.join(", ")} presigned endpoints...</div>`;
 
   try {
-    const response = await fetch(`${API_BASE_URL}/intent/execute-upload/`, {
-      method: "POST",
-      headers: {
-        ...authHeaders(),
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        intent_log_id: currentIntentLogId,
-        file_name: file.name,
-        file_size_bytes: file.size,
-        file_type: file.type || "application/octet-stream",
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || "Failed to initiate execution");
+    // Audit execution notification
+    if (currentIntentLogId) {
+      fetch(`${API_BASE_URL}/intent/execute-upload/`, {
+        method: "POST",
+        headers: {
+          ...authHeaders(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          intent_log_id: currentIntentLogId,
+          file_name: file.name,
+          file_size_bytes: file.size,
+          file_type: file.type || "application/octet-stream",
+        }),
+      }).catch(err => console.warn("Audit execution notice:", err));
     }
 
-    execStatus.innerHTML = `
-      <div class="alert alert-success py-2">
-        <strong>Upload Orchestration Active!</strong> Task ID: <code>${data.task_id}</code><br>
-        Replicating simultaneously to: ${data.selected_clouds.join(", ")}
-      </div>
-    `;
+    // Direct browser-to-cloud upload to selected targets followed by DB confirmation
+    await startDirectUpload(file, selectedClouds, execStatus);
 
-    // Refresh file list and storage summary after 3 seconds
-    setTimeout(() => {
-      if (typeof loadStorageSummary === "function") loadStorageSummary();
-      if (typeof loadRecentFiles === "function") loadRecentFiles();
-      if (typeof loadFiles === "function") loadFiles();
-    }, 3000);
+    if (typeof loadFiles === "function") loadFiles();
+    if (typeof loadRecentFiles === "function") loadRecentFiles();
+    if (typeof loadFolders === "function") loadFolders();
+    if (typeof loadStorageSummary === "function") loadStorageSummary();
 
   } catch (err) {
     console.error("Execute upload error:", err);
-    execStatus.innerHTML = `<div class="alert alert-danger py-2">Execution Error: ${err.message}</div>`;
+    execStatus.innerHTML = `<div class="alert alert-danger py-2">Execution Error: ${err.message || err}</div>`;
   } finally {
     execBtn.disabled = false;
     execBtn.innerHTML = "Execute Multi-Cloud Placement";
