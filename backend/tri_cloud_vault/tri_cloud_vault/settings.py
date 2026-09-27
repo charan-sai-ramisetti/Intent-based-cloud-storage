@@ -294,13 +294,18 @@ CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
 
 # --------------------------------------------------
 # INTENT & LLM OPTIMIZER CONFIG
-# Priority 1: AWS Bedrock (Claude 3.5 Sonnet) — uses AWS IAM, no API key needed
-# Priority 2: Azure OpenAI (GPT-4o)           — uses AZURE_OPENAI_* credentials
-# Priority 3: Heuristic fallback              — offline, zero cost
+# Priority 1: Google Gemini (Gemini 2.0 Flash)     — uses GEMINI_API_KEY
+# Priority 2: AWS Bedrock (Claude 3.5 Sonnet)      — uses AWS IAM, no API key needed
+# Priority 3: Azure OpenAI (GPT-4o)                — uses AZURE_OPENAI_* credentials
+# Priority 4: Heuristic fallback                   — offline, zero cost
 # --------------------------------------------------
 
-# Provider selection: 'bedrock' | 'azure_openai' | 'anthropic' | 'openai' | 'heuristic'
-DEFAULT_LLM_PROVIDER = os.getenv("DEFAULT_LLM_PROVIDER", "bedrock")
+# Provider selection: 'gemini' | 'bedrock' | 'azure_openai' | 'anthropic' | 'openai' | 'heuristic'
+DEFAULT_LLM_PROVIDER = os.getenv("DEFAULT_LLM_PROVIDER", "gemini")
+
+# --- Google Gemini (function calling — requires google-generativeai SDK) ---
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 # --- AWS Bedrock (Claude via AWS credits — no Anthropic key required) ---
 AWS_BEDROCK_REGION = os.getenv("AWS_BEDROCK_REGION", "ap-south-1")

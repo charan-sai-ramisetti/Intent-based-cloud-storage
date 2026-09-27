@@ -8,7 +8,14 @@ across synthetic workloads, collecting statistical metrics for research publicat
 import time
 import numpy as np
 import pandas as pd
+import os
+import django
+import sys
 from typing import List, Dict, Any
+
+# Configure Django
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tri_cloud_vault.settings')
+django.setup()
 
 from optimizer.milp_solver import solve_optimal_placement
 from optimizer.baselines import run_all_baselines
@@ -63,16 +70,16 @@ def run_comprehensive_benchmark(
         cost_rnd = baselines["random"].estimated_monthly_cost_usd
         cost_greedy = baselines["greedy_cheapest"].estimated_monthly_cost_usd
 
-        # Calculate percentage savings (where baseline cost > 0 and MILP is feasible)
+        # Calculate percentage savings (allow negative if MILP is more expensive, though shouldn't happen for optimal)
         if is_feasible and cost_milp < float('inf'):
             if cost_aws > 0:
-                s_aws = max(0.0, (cost_aws - cost_milp) / cost_aws * 100)
+                s_aws = (cost_aws - cost_milp) / cost_aws * 100
                 savings_vs_single_aws.append(s_aws)
             if cost_rr > 0:
-                s_rr = max(0.0, (cost_rr - cost_milp) / cost_rr * 100)
+                s_rr = (cost_rr - cost_milp) / cost_rr * 100
                 savings_vs_round_robin.append(s_rr)
             if cost_rnd > 0:
-                s_rnd = max(0.0, (cost_rnd - cost_milp) / cost_rnd * 100)
+                s_rnd = (cost_rnd - cost_milp) / cost_rnd * 100
                 savings_vs_random.append(s_rnd)
             if cost_greedy > 0:
                 s_greedy = (cost_greedy - cost_milp) / cost_greedy * 100
@@ -119,3 +126,9 @@ def run_comprehensive_benchmark(
         "dataframe": pd.DataFrame(results_log),
         "raw_log": results_log
     }
+
+if __name__ == "__main__":
+    results = run_comprehensive_benchmark(n_samples=50)
+    print("Benchmark complete.")
+    from .report_exporter import export_benchmark_to_csv
+    export_benchmark_to_csv(results["dataframe"], "research/data/optimizer/benchmark_results.csv")

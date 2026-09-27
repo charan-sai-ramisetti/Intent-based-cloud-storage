@@ -2,9 +2,10 @@
 LLM-based intent parser for natural language storage requirements.
 
 This module extracts structured storage constraints from plain English using:
-  - AWS Bedrock  → Anthropic Claude 3.5 Sonnet (Tool Use)     [Priority 1 - AWS Credits]
-  - Azure OpenAI → GPT-4o (Function Calling)                  [Priority 2 - Azure Credits]
-  - Rule-Based   → Regex heuristics (offline fallback)         [Priority 3 - Free]
+  - Google Gemini → Gemini 2.0 Flash (Function Calling)        [Priority 1 - Google Cloud]
+  - AWS Bedrock   → Anthropic Claude 3.5 Sonnet (Tool Use)     [Priority 2 - AWS Credits]
+  - Azure OpenAI  → GPT-4o (Function Calling)                  [Priority 3 - Azure Credits]
+  - Rule-Based    → Regex heuristics (offline fallback)         [Priority 4 - Free]
 
 Critical constraint: The LLM only parses requirements into structured JSON.
 Cloud placement decisions are ALWAYS made by the MILP optimizer, never by the LLM.
@@ -188,6 +189,134 @@ def parse_intent_bedrock(user_text: str, file_size_bytes: int) -> tuple[ParsedCo
             return constraints, latency_ms, confidence
 
     raise ValueError("No tool_use block in Bedrock response")
+
+
+# ---------------------------------------------------------------------------
+# Priority 1: Google Gemini → Gemini 2.0 Flash (Function Calling)
+# ---------------------------------------------------------------------------
+
+def parse_intent_gemini(user_text: str, file_size_bytes: int) -> tuple[ParsedConstraints, float, float]:
+    """
+    Parse user intent using Google Gemini with function calling.
+
+    Requires GEMINI_API_KEY set in environment or Django settings.
+    Uses the google-genai SDK (new unified SDK).
+
+    Returns: (ParsedConstraints, latency_ms, confidence_score)
+    """
+    from google import genai
+    from google.genai import types
+
+    api_key = _cfg("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY not configured")
+
+    client = genai.Client(api_key=api_key)
+    model_name = _cfg("GEMINI_MODEL", "gemini-2.0-flash")
+
+    # Define the function declaration for Gemini
+    extract_constraints_func = types.FunctionDeclaration(
+        name="extract_storage_constraints",
+        description="Extract structured storage requirements from user text",
+        parameters=types.Schema(
+            type=types.Type.OBJECT,
+            properties={
+                "redundancy_level": types.Schema(
+                    type=types.Type.INTEGER,
+                    description="Number of cloud replicas (1-3)"
+                ),
+                "durability_target": types.Schema(
+                    type=types.Type.NUMBER,
+                    description="Target durability percentage (99.0 to 99.999999999)"
+                ),
+                "max_budget_monthly_usd": types.Schema(
+                    type=types.Type.NUMBER,
+                    description="Maximum monthly cost in USD"
+                ),
+                "max_latency_ms": types.Schema(
+                    type=types.Type.INTEGER,
+                    description="Maximum acceptable latency in milliseconds (0-10000)"
+                ),
+                "geo_restriction": types.Schema(
+                    type=types.Type.ARRAY,
+                    items=types.Schema(type=types.Type.STRING),
+                    description="Allowed regions: ap-south-1, centralindia, asia-south1"
+                ),
+                "compliance_requirements": types.Schema(
+                    type=types.Type.ARRAY,
+                    items=types.Schema(type=types.Type.STRING),
+                    description="Required compliance standards (e.g. HIPAA, GDPR)"
+                ),
+                "primary_goal": types.Schema(
+                    type=types.Type.STRING,
+                    enum=["COST_MINIMIZATION", "LATENCY_MINIMIZATION", "MAX_REDUNDANCY", "BALANCED"],
+                    description="Optimization objective"
+                ),
+                "access_pattern": types.Schema(
+                    type=types.Type.STRING,
+                    enum=["hot", "warm", "cold", "archival"],
+                    description="Expected access frequency"
+                ),
+                "expected_monthly_reads": types.Schema(
+                    type=types.Type.INTEGER,
+                    description="Expected read operations per month"
+                ),
+                "expected_monthly_writes": types.Schema(
+                    type=types.Type.INTEGER,
+                    description="Expected write operations per month"
+                ),
+                "data_sensitivity": types.Schema(
+                    type=types.Type.STRING,
+                    enum=["public", "internal", "confidential", "restricted"],
+                    description="Data classification level"
+                ),
+            },
+            required=["primary_goal", "access_pattern"],
+        ),
+    )
+
+    tool = types.Tool(function_declarations=[extract_constraints_func])
+
+    prompt = (
+        f"User intent: {user_text}\n"
+        f"File size: {file_size_bytes / (1024 ** 2):.2f} MB\n\n"
+        "Extract storage requirements from this text. "
+        "Use the extract_storage_constraints function."
+    )
+
+    start = time.perf_counter()
+    response = client.models.generate_content(
+        model=model_name,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=INTENT_PARSER_SYSTEM_PROMPT,
+            tools=[tool],
+            tool_config=types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(
+                    mode="ANY"
+                )
+            ),
+        ),
+    )
+    latency_ms = (time.perf_counter() - start) * 1000
+
+    # Extract function call from response
+    for part in response.candidates[0].content.parts:
+        if part.function_call:
+            fn = part.function_call
+            if fn.name == "extract_storage_constraints":
+                args = dict(fn.args)
+                # Convert repeated fields (lists) from proto
+                for key in ["geo_restriction", "compliance_requirements"]:
+                    if key in args and hasattr(args[key], '__iter__') and not isinstance(args[key], str):
+                        args[key] = list(args[key])
+
+                constraints = ParsedConstraints(**args)
+                confidence = 0.90
+                logger.info(f"[Gemini] parsed in {latency_ms:.0f}ms, confidence={confidence}")
+                return constraints, latency_ms, confidence
+
+    raise ValueError("No function call in Gemini response")
 
 
 # ---------------------------------------------------------------------------
@@ -414,6 +543,7 @@ def parse_intent_heuristic(user_text: str, file_size_bytes: int) -> tuple[Parsed
 
 # Provider routing map — order defines priority
 _PROVIDER_MAP = {
+    "gemini":        parse_intent_gemini,
     "bedrock":       parse_intent_bedrock,
     "azure_openai":  parse_intent_azure_openai,
     "anthropic":     parse_intent_anthropic,
@@ -422,6 +552,7 @@ _PROVIDER_MAP = {
 }
 
 _PROVIDER_MODEL = {
+    "gemini":        "gemini-2.0-flash",
     "bedrock":       "anthropic.claude-3-5-sonnet-20241022-v2:0",
     "azure_openai":  "gpt-4o",
     "anthropic":     "claude-3-5-sonnet-20241022",
@@ -430,7 +561,7 @@ _PROVIDER_MODEL = {
 }
 
 # Automatic failover chain — if primary fails, try these in order
-_FAILOVER_CHAIN = ["bedrock", "azure_openai", "heuristic"]
+_FAILOVER_CHAIN = ["gemini", "bedrock", "azure_openai", "heuristic"]
 
 
 def parse_storage_intent(intent_input: StorageIntentInput) -> IntentParseResult:
@@ -438,13 +569,14 @@ def parse_storage_intent(intent_input: StorageIntentInput) -> IntentParseResult:
     Main entry point for intent parsing.
 
     Priority order (configurable via DEFAULT_LLM_PROVIDER env var):
-      1. bedrock      → AWS Bedrock Claude 3.5 Sonnet   (AWS credits, no Anthropic key)
-      2. azure_openai → Azure OpenAI GPT-4o             (Azure credits, no OpenAI key)
-      3. heuristic    → Regex rule-based fallback        (offline, free)
+      1. gemini       → Google Gemini 2.0 Flash          (Google Cloud, function calling)
+      2. bedrock      → AWS Bedrock Claude 3.5 Sonnet    (AWS credits, no Anthropic key)
+      3. azure_openai → Azure OpenAI GPT-4o              (Azure credits, no OpenAI key)
+      4. heuristic    → Regex rule-based fallback         (offline, free)
 
     Any failure in a higher priority provider automatically falls back to the next.
     """
-    primary = _cfg("DEFAULT_LLM_PROVIDER", "bedrock")
+    primary = _cfg("DEFAULT_LLM_PROVIDER", "gemini")
 
     # Build the attempt chain: start with the primary, then append failovers (excluding primary)
     chain = [primary] + [p for p in _FAILOVER_CHAIN if p != primary]

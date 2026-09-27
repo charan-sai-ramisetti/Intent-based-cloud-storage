@@ -7,12 +7,19 @@ distributions (Zipfian access frequencies, log-normal file sizes, multi-tenant S
 
 import random
 import numpy as np
-from typing import List, Dict, Tuple
+import json
+import argparse
+import os
+import sys
+from typing import List, Dict
+
+# Add backend to path for imports
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from intent.schemas import ParsedConstraints
 
 
 def generate_synthetic_workload(
-    n_samples: int = 100,
+    n_samples: int = 500,
     seed: int = 42,
     zipf_alpha: float = 1.2,
 ) -> List[Dict]:
@@ -31,14 +38,8 @@ def generate_synthetic_workload(
     random.seed(seed)
 
     # File size distribution: Log-normal distribution (mean ~50MB, range 1KB - 50GB)
-    # mu=17.5, sigma=2.0 gives realistic file sizes in bytes
     raw_sizes = np.random.lognormal(mean=17.5, sigma=2.0, size=n_samples)
     file_sizes = np.clip(raw_sizes, 1024, 50 * 1024 * 1024 * 1024).astype(int)
-
-    # Access frequencies following Zipfian distribution
-    ranks = np.arange(1, n_samples + 1)
-    zipf_weights = 1.0 / (ranks ** zipf_alpha)
-    zipf_probs = zipf_weights / np.sum(zipf_weights)
 
     access_patterns = ["hot", "warm", "cold", "archival"]
     primary_goals = ["COST_MINIMIZATION", "LATENCY_MINIMIZATION", "MAX_REDUNDANCY", "BALANCED"]
@@ -46,39 +47,53 @@ def generate_synthetic_workload(
 
     workload = []
 
-    for i in range(n_samples):
-        size_bytes = int(file_sizes[i])
+    # Edge cases
+    edge_cases = [
+        {"size": 1024, "pattern": "hot", "name": "micro_file"},
+        {"size": 50 * 1024 * 1024 * 1024, "pattern": "archival", "name": "large_archive"},
+    ]
 
-        # Access pattern selection weighted by Zipfian popularity
-        if i < n_samples * 0.15:
-            pattern = "hot"
+    for i in range(n_samples):
+        # Insert edge cases in the first few slots
+        if i < len(edge_cases):
+            size_bytes = edge_cases[i]["size"]
+            pattern = edge_cases[i]["pattern"]
+        else:
+            size_bytes = int(file_sizes[i])
+            # Access pattern selection weighted
+            if random.random() < 0.15:
+                pattern = "hot"
+            elif random.random() < 0.45:
+                pattern = "warm"
+            elif random.random() < 0.80:
+                pattern = "cold"
+            else:
+                pattern = "archival"
+
+        # Reads
+        if pattern == "hot":
             monthly_reads = int(np.random.uniform(500, 5000))
-        elif i < n_samples * 0.45:
-            pattern = "warm"
+        elif pattern == "warm":
             monthly_reads = int(np.random.uniform(50, 500))
-        elif i < n_samples * 0.80:
-            pattern = "cold"
+        elif pattern == "cold":
             monthly_reads = int(np.random.uniform(2, 50))
         else:
-            pattern = "archival"
             monthly_reads = int(np.random.uniform(0, 2))
 
-        # Redundancy distribution: 1 (60%), 2 (30%), 3 (10%)
+        # Redundancy distribution
         redundancy = random.choices([1, 2, 3], weights=[0.60, 0.30, 0.10])[0]
 
-        # Primary goal distribution
+        # Primary goal
         goal = random.choices(primary_goals, weights=[0.45, 0.25, 0.15, 0.15])[0]
 
-        # Latency SLA constraint (optional, 40% of workloads have an explicit SLA)
+        # Constraints
         has_latency_sla = random.random() < 0.40
         max_latency = random.choice([30, 50, 100, 250]) if has_latency_sla else None
 
-        # Budget constraint (optional, 30% of workloads)
         has_budget = random.random() < 0.30
         estimated_gb = size_bytes / (1024 ** 3)
         max_budget = round(float(estimated_gb * random.uniform(0.015, 0.08) * redundancy), 2) if has_budget else None
 
-        # Geo-restriction (optional, 20% of workloads have sovereign data residency)
         has_geo = random.random() < 0.20
         geo_res = random.sample(regions, k=random.randint(1, 2)) if has_geo else None
 
@@ -103,3 +118,34 @@ def generate_synthetic_workload(
         })
 
     return workload
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--count", type=int, default=500)
+    parser.add_argument("--seed", type=int, default=42)
+    args = parser.parse_args()
+
+    data = generate_synthetic_workload(n_samples=args.count, seed=args.seed)
+
+    output_dir = 'research/data/workloads'
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Serialize ParsedConstraints manually (they are Pydantic objects)
+    serializable_data = []
+    for item in data:
+        constraints_obj = item["constraints"]
+        constraints_dict = (
+            constraints_obj.model_dump()
+            if hasattr(constraints_obj, "model_dump")
+            else constraints_obj.dict()
+        )
+        serializable_data.append({
+            **item,
+            "constraints": constraints_dict
+        })
+
+    output_path = f"{output_dir}/workloads_{args.count}_seed_{args.seed}.json"
+    with open(output_path, 'w') as f:
+        json.dump(serializable_data, f, indent=2)
+
+    print(f"Generated {args.count} workloads to {output_path}")

@@ -58,7 +58,8 @@ SECRET_JSON='{
   "AZURE_OPENAI_API_VERSION":     "2024-08-01-preview",
 
   "ANTHROPIC_API_KEY":            "",
-  "OPENAI_API_KEY":               ""
+  "OPENAI_API_KEY":               "",
+  "GEMINI_API_KEY":               "REPLACE_WITH_GEMINI_API_KEY"
 }'
 
 if [ "${1}" = "update" ]; then

@@ -56,6 +56,11 @@ class ParsedConstraints(BaseModel):
         le=10000,
         description="Maximum acceptable read/write latency in milliseconds"
     )
+    max_ttfb_ms: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="Maximum acceptable empirical TTFB in milliseconds"
+    )
 
     # Geographic and compliance
     geo_restriction: Optional[List[str]] = Field(
@@ -128,6 +133,13 @@ class OptimizationRecommendation(BaseModel):
 
     reasoning: str = Field(..., description="Human-readable explanation of the decision")
 
+    # Empirical performance research fields
+    empirical_performance_enabled: bool = Field(default=False)
+    empirical_ttfb_statistic: Optional[str] = Field(default=None)
+    empirical_ttfb_ms: Optional[float] = Field(default=None)
+    empirical_ttfb_available: bool = Field(default=False)
+    empirical_ttfb_source: Optional[str] = Field(default=None)
+
 
 class IntentParseResult(BaseModel):
     """
@@ -138,7 +150,7 @@ class IntentParseResult(BaseModel):
     parsed_constraints: ParsedConstraints
     recommendation: Optional[OptimizationRecommendation] = None
 
-    llm_provider: Literal["bedrock", "azure_openai", "anthropic", "openai", "heuristic"]
+    llm_provider: Literal["bedrock", "azure_openai", "anthropic", "openai", "gemini", "heuristic"]
     llm_model: Optional[str] = None
     parse_latency_ms: float
     confidence_score: float = Field(ge=0.0, le=1.0)

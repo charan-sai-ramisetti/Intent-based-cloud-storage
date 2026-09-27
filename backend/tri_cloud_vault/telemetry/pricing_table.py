@@ -36,7 +36,8 @@ DEFAULT_PRICING_TABLE = {
                 "put_per_10k": 0.05,
                 "get_per_10k": 0.004,
                 "egress_per_gb": 0.09,
-                "latency_typical_ms": 150000.0,  # minutes to hours
+                "latency_typical_ms": 100.0,  # Updated from 150000.0ms to reflect instant retrieval
+                "retrieval_time_description": "milliseconds to seconds (Instant Retrieval)",
                 "availability": 99.9,
                 "min_duration_days": 90,
             }
@@ -69,7 +70,8 @@ DEFAULT_PRICING_TABLE = {
                 "put_per_10k": 0.13,
                 "get_per_10k": 0.065,
                 "egress_per_gb": 0.087,
-                "latency_typical_ms": 3600000.0,  # hours
+                "latency_typical_ms": 20.0,  # Updated from 3600000.0ms (hours) to reflect operational latency post-rehydration
+                "retrieval_time_description": "milliseconds (post-rehydration)",
                 "availability": 99.0,
                 "min_duration_days": 180,
             }
@@ -102,7 +104,8 @@ DEFAULT_PRICING_TABLE = {
                 "put_per_10k": 0.10,
                 "get_per_10k": 0.05,
                 "egress_per_gb": 0.12,
-                "latency_typical_ms": 50.0,  # Millisecond access in GCS Coldline!
+                "latency_typical_ms": 50.0,  # Coldline typically 50ms access
+                "retrieval_time_description": "milliseconds",
                 "availability": 99.9,
                 "min_duration_days": 90,
             }
