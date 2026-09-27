@@ -212,7 +212,7 @@ def parse_intent_gemini(user_text: str, file_size_bytes: int) -> tuple[ParsedCon
         raise ValueError("GEMINI_API_KEY not configured")
 
     client = genai.Client(api_key=api_key)
-    model_name = _cfg("GEMINI_MODEL", "gemini-2.0-flash")
+    model_name = _cfg("GEMINI_MODEL", "gemini-3.8-flash")
 
     # Define the function declaration for Gemini
     extract_constraints_func = types.FunctionDeclaration(
@@ -552,7 +552,7 @@ _PROVIDER_MAP = {
 }
 
 _PROVIDER_MODEL = {
-    "gemini":        "gemini-2.0-flash",
+    "gemini":        "gemini-3.8-flash",
     "bedrock":       "anthropic.claude-3-5-sonnet-20241022-v2:0",
     "azure_openai":  "gpt-4o",
     "anthropic":     "claude-3-5-sonnet-20241022",
