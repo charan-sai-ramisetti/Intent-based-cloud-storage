@@ -596,7 +596,7 @@ def parse_storage_intent(intent_input: StorageIntentInput) -> IntentParseResult:
             break
 
         except Exception as exc:
-            logger.warning(f"Provider '{provider}' failed: {exc}. Trying next in chain…")
+            logger.warning(f"Provider '{provider}' failed. Trying next in chain…", exc_info=True)
             continue
     else:
         # All providers failed — this should never happen because heuristic always succeeds
