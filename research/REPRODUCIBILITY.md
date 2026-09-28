@@ -1,10 +1,35 @@
-# Reproducibility Documentation
+# Reproducibility Guide
 
-This project uses a deterministic data processing pipeline to map experimental benchmark data to MILP optimization parameters.
+## 1. Setup
 
-## Pipeline
-1. `clean_data.py`: Preprocesses raw `results_raw.csv`.
-2. `generate_parameters.py`: Joins benchmark data with provider pricing lists to create `cloud_parameters.csv`.
-3. `milp_solver.py`: Consumes `cloud_parameters.csv` for optimization.
+### Dependencies
+- Python 3.10+
+- Requirements listed in `requirements.txt` (including PuLP and pandas).
 
-All scripts depend on `research/data/optimizer/cloud_parameters.csv` ensuring all algorithms (MILP + Baselines) operate on the same data.
+### Environment
+Ensure the following PYTHONPATH is set:
+`export PYTHONPATH=$PYTHONPATH:$(pwd)/backend/tri_cloud_vault`
+
+## 2. Executing the Pipeline
+
+To run the complete experiment and generate the final dataset:
+
+```bash
+python research/run_full_pipeline.py
+```
+
+This will:
+1. Prepare parameters.
+2. Validate parameters.
+3. Generate workloads.
+4. Run benchmarks and ablation studies.
+5. Create summary tables.
+
+## 3. Configuration
+
+- Workload count: 500
+- Random seed: 42
+- Solver: CBC (via PuLP)
+
+## 4. Output Data
+- All datasets are stored in `research/data/optimizer/`.

@@ -29,4 +29,4 @@ azure_location  = "centralindia"
 gcp_project_id = "striped-device-508614-f3"
 gcp_region     = "asia-south1"
 
-acm-arn="arn:aws:acm:ap-south-1:468490947328:certificate/946d8b6c-4762-4acd-8c39-a0b2eaa9fde5"
+acm-arn="arn:aws:acm:ap-south-1:280517746232:certificate/84055dec-3b26-4ee0-9ac0-ff99a5596e57"
