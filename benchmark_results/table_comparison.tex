@@ -1,0 +1,19 @@
+\begin{table}[t]
+\centering
+\caption{Empirical Comparison of Intent-Driven MILP Optimizer vs. Heuristic Baselines ($N=10$)}
+\label{tab:milp_vs_baselines}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Placement Strategy} & \textbf{MILP Cost Advantage} & \textbf{Durability SLA} & \textbf{Feasibility} \\
+\midrule
+\textbf{TriCloud MILP (Proposed)} & \textbf{Reference Optimal} & \textbf{99.999999999\%} & \textbf{80.0\%} \\
+Single Cloud AWS S3 & +-91.98\% & 99.999999999\% & 100.0\% \\
+Round-Robin Distribution & +-161.35\% & 99.999999999\% & 100.0\% \\
+Random Placement & +-251.91\% & 99.999999999\% & 100.0\% \\
+Greedy Minimum Cost & -260.15\% & 99.999999999\% & 100.0\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% Solver Performance Metrics:
+% Mean Solver Time: 352.73 ms (p90: 471.38 ms, p99: 2143.24 ms)

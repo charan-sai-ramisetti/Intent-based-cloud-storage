@@ -118,10 +118,18 @@ def solve_optimal_placement(
 
     # Decision variables: x[cloud, tier] = 1 if we store in that (cloud, tier), 0 otherwise
     x = {}
+    # New decision variables for provider selection
+    y = {}
     for cloud in available_clouds:
+        # Provider selection variable y[cloud]
+        y[cloud] = LpVariable(f"y_{cloud}", cat=LpBinary)
+
         for tier in tiers:
             if (cloud, tier) in costs:
                 x[(cloud, tier)] = LpVariable(f"x_{cloud}_{tier}", cat=LpBinary)
+
+        # Link x and y: sum(x[cloud, tier]) == y[cloud]
+        prob += lpSum([x[(cloud, tier)] for tier in tiers if (cloud, tier) in x]) == y[cloud], f"ProviderTierLink_{cloud}"
 
     # Objective function based on primary goal
     if constraints.primary_goal == "COST_MINIMIZATION":
@@ -130,11 +138,21 @@ def solve_optimal_placement(
     elif constraints.primary_goal == "LATENCY_MINIMIZATION":
         # Minimize average latency (weighted by selection)
         prob += lpSum([latencies[ct] * x[ct] for ct in x]), "AverageLatency"
+    elif constraints.primary_goal == "COST_LATENCY":
+        # Multi-objective: normalized cost + normalized latency
+        max_cost = max(costs.values())
+        max_latency = max(latencies.values())
+        prob += lpSum([
+            (costs[ct] / max_cost + latencies[ct] / max_latency) * x[ct]
+            for ct in x
+        ]), "CostLatencyObjective"
     elif constraints.primary_goal == "MAX_REDUNDANCY":
         # Maximize redundancy (minimize negative count)
-        prob += -lpSum([x[ct] for ct in x]), "MaxRedundancy"
+        prob += -lpSum([y[c] for c in available_clouds]), "MaxRedundancy"
     else:  # BALANCED
         # Multi-objective: normalized cost + normalized latency
+        # Note: Need to adjust if not using x[ct] for redundancy anymore,
+        # but let's stick to the user formula for now which uses x[ct]
         max_cost = max(costs.values())
         max_latency = max(latencies.values())
         prob += lpSum([
@@ -143,7 +161,8 @@ def solve_optimal_placement(
         ]), "BalancedObjective"
 
     # Constraint 1: Redundancy requirement (minimum number of replicas)
-    prob += lpSum([x[ct] for ct in x]) >= constraints.redundancy_level, "MinRedundancy"
+    # Changed to use y[c] (distinct providers)
+    prob += lpSum([y[c] for c in available_clouds]) >= constraints.redundancy_level, "MinRedundancy"
 
     # Constraint 2: Budget constraint (if specified)
     if constraints.max_budget_monthly_usd is not None:
@@ -232,10 +251,10 @@ def solve_optimal_placement(
     return OptimizationRecommendation(
         selected_clouds=selected_clouds,
         selected_tiers=selected_tiers,
-        estimated_monthly_cost_usd=round(total_cost, 4),
+        estimated_monthly_cost_usd=round(total_cost, 6),
         estimated_latency_ms=round(avg_latency, 2),
         durability_achieved=round(durability_achieved, 9),
-        cost_breakdown={k: round(v, 4) for k, v in cost_breakdown.items()},
+        cost_breakdown={k: round(v, 6) for k, v in cost_breakdown.items()},
         optimization_time_ms=round(optimization_time_ms, 2),
         solver_status="optimal" if status == "Optimal" else "feasible",
         reasoning=reasoning

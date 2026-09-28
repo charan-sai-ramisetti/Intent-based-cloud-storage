@@ -1,4 +1,4 @@
-import pandas as pd
+﻿import pandas as pd
 import os
 import random
 from typing import Dict, List, Tuple
@@ -42,7 +42,7 @@ def build_composite_baseline_recommendation(
             egress_gb=egress_gb
         )
         total_cost += breakdown["total"]
-        cost_breakdown[f"{cloud}_{tier}"] = round(breakdown["total"], 4)
+        cost_breakdown[f"{cloud}_{tier}"] = round(breakdown["total"], 6)
 
         matching = df[(df['cloud'] == cloud) & (df['storage_tier'] == tier)]
         if not matching.empty:
@@ -57,10 +57,15 @@ def build_composite_baseline_recommendation(
     return OptimizationRecommendation(
         selected_clouds=selected_clouds,
         selected_tiers=selected_tiers,
-        estimated_monthly_cost_usd=round(total_cost, 4),
+        estimated_monthly_cost_usd=round(total_cost, 6),
         estimated_latency_ms=round(avg_latency, 2),
         durability_achieved=round(durability, 9),
-        cost_breakdown=cost_breakdown,
+        cost_breakdown=cost_breakdown, 
+        empirical_performance_enabled=True, 
+        empirical_ttfb_statistic="mean", 
+        empirical_ttfb_ms=round(avg_latency, 2), 
+        empirical_ttfb_available=True, 
+        empirical_ttfb_source="baseline_heuristic",
         optimization_time_ms=0.0,
         solver_status="optimal",
         reasoning=reasoning
@@ -176,3 +181,5 @@ def run_all_baselines(file_size_bytes: int, constraints: ParsedConstraints) -> D
         "round_robin": rr_rec,
         "random": random_rec
     }
+
+
