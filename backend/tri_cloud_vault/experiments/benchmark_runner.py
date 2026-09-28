@@ -5,14 +5,15 @@ Executes comparative benchmarks evaluating MILP vs. 4 Baseline Heuristics
 across synthetic workloads, collecting statistical metrics for research publication.
 """
 
+import os
+import sys
+# Configure path for dependencies
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import time
 import numpy as np
 import pandas as pd
-import os
-import django
-import sys
 from typing import List, Dict, Any
-
+import django
 # Configure Django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tri_cloud_vault.settings')
 django.setup()
@@ -64,6 +65,20 @@ def run_comprehensive_benchmark(
         is_feasible = milp_res.solver_status in ["optimal", "feasible"]
         if is_feasible:
             feasible_count += 1
+            # Calculate savings
+            if cost_milp < float('inf'):
+                for b_name, b_rec in baselines.items():
+                    b_cost = b_rec.estimated_monthly_cost_usd
+                    if b_cost > 0:
+                        savings = (b_cost - cost_milp) / b_cost * 100
+                        if b_name == "single_cloud_aws":
+                            savings_vs_single_aws.append(savings)
+                        elif b_name == "round_robin":
+                            savings_vs_round_robin.append(savings)
+                        elif b_name == "random":
+                            savings_vs_random.append(savings)
+                        elif b_name == "greedy_cheapest":
+                            savings_vs_greedy.append(savings)
 
         # Helper to get detailed metrics for a recommendation
         def get_detailed_metrics(rec, milp_rec):
@@ -140,7 +155,7 @@ def run_comprehensive_benchmark(
     }
 
 if __name__ == "__main__":
-    results = run_comprehensive_benchmark(n_samples=50)
+    results = run_comprehensive_benchmark(n_samples=500)
     print("Benchmark complete.")
     from .report_exporter import export_benchmark_to_csv
     export_benchmark_to_csv(results["dataframe"], "research/data/optimizer/benchmark_results.csv")

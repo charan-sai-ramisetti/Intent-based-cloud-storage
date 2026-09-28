@@ -14,6 +14,9 @@ import pandas as pd
 import numpy as np
 import time
 
+# Configure paths
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 # Configure Django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tri_cloud_vault.settings')
 import django
@@ -28,7 +31,7 @@ def run_ablation_experiment():
     print("Running Ablation Experiment...")
     
     # Generate common workloads
-    n_samples = 50
+    n_samples = 500
     workloads = generate_synthetic_workload(n_samples=n_samples, seed=42)
     
     # Ablation Configurations
