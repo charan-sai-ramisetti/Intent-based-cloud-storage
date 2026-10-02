@@ -212,7 +212,7 @@ def parse_intent_gemini(user_text: str, file_size_bytes: int) -> tuple[ParsedCon
         raise ValueError("GEMINI_API_KEY not configured")
 
     client = genai.Client(api_key=api_key)
-    model_name = _cfg("GEMINI_MODEL", "gemini-3.8-flash")
+    model_name = _cfg("GEMINI_MODEL", "gemini-3.5-flash")
 
     # Define the function declaration for Gemini
     extract_constraints_func = types.FunctionDeclaration(
@@ -284,21 +284,44 @@ def parse_intent_gemini(user_text: str, file_size_bytes: int) -> tuple[ParsedCon
         "Use the extract_storage_constraints function."
     )
 
-    start = time.perf_counter()
-    response = client.models.generate_content(
-        model=model_name,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=INTENT_PARSER_SYSTEM_PROMPT,
-            tools=[tool],
-            tool_config=types.ToolConfig(
-                function_calling_config=types.FunctionCallingConfig(
-                    mode="ANY"
+    # Retry with exponential backoff for transient 503 (high demand) errors
+    max_retries = 3
+    last_exc = None
+
+    for attempt in range(max_retries):
+        try:
+            start = time.perf_counter()
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=INTENT_PARSER_SYSTEM_PROMPT,
+                    tools=[tool],
+                    tool_config=types.ToolConfig(
+                        function_calling_config=types.FunctionCallingConfig(
+                            mode="ANY"
+                        )
+                    ),
+                ),
+            )
+            latency_ms = (time.perf_counter() - start) * 1000
+            break  # Success — exit retry loop
+        except Exception as exc:
+            last_exc = exc
+            exc_str = str(exc)
+            # Retry only on 503 UNAVAILABLE (capacity) or 429 (rate limit)
+            if "503" in exc_str or "429" in exc_str or "UNAVAILABLE" in exc_str:
+                wait = 2 ** attempt  # 1s, 2s, 4s
+                logger.warning(
+                    f"[Gemini] attempt {attempt + 1}/{max_retries} got {exc_str[:80]}; "
+                    f"retrying in {wait}s…"
                 )
-            ),
-        ),
-    )
-    latency_ms = (time.perf_counter() - start) * 1000
+                time.sleep(wait)
+                continue
+            raise  # Non-retryable error — propagate immediately
+    else:
+        # All retries exhausted
+        raise last_exc  # type: ignore[misc]
 
     # Extract function call from response
     for part in response.candidates[0].content.parts:
